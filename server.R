@@ -7,6 +7,7 @@
 
 library(shiny)
 library(tidyverse)
+library(stringr)
 library(pwr)
 library(VariantAnnotation)
 library(Biostrings)
@@ -21,7 +22,7 @@ shinyServer(function(input, output) {
     plotDat = data_frame(meanDiff = seq(0,5, by = .05),
                          pwr = pwr.t.test(n = input$nbarcode,
                                           d = meanDiff / input$sigma,
-                                          sig.level = .05 / input$nsnp)$power)
+                                          sig.level = .05 / input$nsnp)$power) # This is where the bonferonni correction somes in
     
     ggplot(plotDat, aes(meanDiff, pwr)) + 
       geom_line() + 
@@ -38,19 +39,20 @@ shinyServer(function(input, output) {
       return(NULL)
     }
     
-    skipNum = system(paste0('grep ^## ', inVCF$datapath, ' | wc -l'), intern = TRUE) %>% as.numeric
+    # skipNum = system(paste0('grep ^## ', inVCF$datapath, ' | wc -l'), intern = TRUE) %>% as.numeric
+    # 
+    # #Check that the header doesn't have spaces in place of tabs. If it does, replace the spaces with tabs and create a new col_names variable
+    # vcfColumns = system(paste0('head -', skipNum + 1, ' ~/plateletMPRA/data/CD36_initial75_dbSNP.vcf | tail -1'), 
+    #                     intern = TRUE) %>% 
+    #   gsub('#', '', .) %>% 
+    #   gsub('[ ]+', '\t', .) %>% #replace spaces with tabs if applicable
+    #   str_split('\t') %>% 
+    #   unlist
     
-    #Check that the header doesn't have spaces in place of tabs. If it does, replace the spaces with tabs and create a new col_names variable
-    vcfColumns = system(paste0('head -', skipNum + 1, ' ~/plateletMPRA/data/CD36_initial75_dbSNP.vcf | tail -1'), 
-                        intern = TRUE) %>% 
-      gsub('#', '', .) %>% 
-      gsub('[ ]+', '\t', .) %>% #replace spaces with tabs if applicable
-      str_split('\t') %>% 
-      unlist
-    
-    read_tsv(inVCF$datapath, 
-             skip = skipNum + 1,
-             col_names = vcfColumns)
+    readVcf(inVCF$datapath, 'hg38')
+    # read_tsv(inVCF$datapath, 
+    #          skip = skipNum + 1,
+    #          col_names = vcfColumns)
   })
   
   vcfOut = eventReactive(input$Go, {
@@ -58,9 +60,19 @@ shinyServer(function(input, output) {
   })
 
   
-  output$inputHead = renderTable(
-    head(inVCF())
-  )
+  output$inputHead = renderTable({
+    if (is.null(inVCF())){
+      return(NULL)
+    }
+    
+    inVCF() %>% 
+      rowRanges %>% 
+      as.data.frame %>% 
+      mutate(.,
+             ALT = ALT %>% map_chr(~as.character(paste(.x, collapse = ','))), 
+             snp = rownames(.)) %>% 
+      head
+  })
   
   output$outputHead = eventReactive(input$Go,{
     validate(
