@@ -11,9 +11,13 @@ library(stringr)
 library(pwr)
 library(VariantAnnotation)
 library(Biostrings)
-library(BSgenome.Hsapiens.UCSC.hg38)
-source('scripts/processVCF.R')
+#library(BSgenome.Hsapiens.UCSC.hg38)
+library(magrittr)
+source('~/designMPRA/scripts/processVCF.R')
+expand = S4Vectors::expand
 
+load('data/inertTenmers.RData') # just using these until 12mers are ready
+mers = tenmers
 
 shinyServer(function(input, output) {
 
@@ -35,7 +39,7 @@ shinyServer(function(input, output) {
   inVCF = reactive({
     inVCF = input$vcf
     
-    if (is.null(inVCF)){
+    if (is.null(inVCF)) {
       return(NULL)
     }
     
@@ -50,18 +54,30 @@ shinyServer(function(input, output) {
     #   unlist
     
     readVcf(inVCF$datapath, 'hg38')
-    # read_tsv(inVCF$datapath, 
-    #          skip = skipNum + 1,
-    #          col_names = vcfColumns)
+  })
+  
+  output$testHead = eventReactive(input$Go, {
+    head(mtcars)
   })
   
   vcfOut = eventReactive(input$Go, {
-    inVCF() %>% processVCF(input$nBCperSNP, input$contextWidth)
+    print('We\'re in!')
+    
+    validate(
+      need(input$nBCperSNP > 0, 
+           'Please input a number of barcodes to use per SNP')
+      )
+    processVCF(inVCF(), input$nBCperSNP, input$contextWidth, input$fwprimer, input$revprimer)
+  })
+  
+  tmp = observeEvent(input$Go, {
+    print('test')
+    print(str(vcfOut()))
   })
 
   
   output$inputHead = renderTable({
-    if (is.null(inVCF())){
+    if (is.null(inVCF())) {
       return(NULL)
     }
     
@@ -74,29 +90,11 @@ shinyServer(function(input, output) {
       head
   })
   
-  output$outputHead = eventReactive(input$Go,{
-    validate(
-      need(input$nBCperSNP > 0,
-           'Please input a number of barcodes per snp to proceed')
-    )
-    
-    validate(
-      need(nrow(inVCF()) > 0,
-           'Please input a VCF')
-    )
-    
-    validate(
-      need(nrow(vcfOut) > 0,
-           'Sequence generation failed')
-    )
-    
-    head(vcfOut())
-  })
-  
   output$downloadSequences = downloadHandler(
-    'out.tsv',
+    filename = function() {'out.tsv'},
     content = function(file){
-      write.csv(vcfOut(), file)
-    })
+      write_tsv(vcfOut()$result, file)
+    }
+  )
 
 })
