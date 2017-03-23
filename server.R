@@ -67,14 +67,14 @@ shinyServer(function(input, output) {
     
     nSnp = inVCF() %>% expand %>% nrow
     
-    timeGuess = round(nSnp*input$nBCperSNP*30/1000, digits = 3)
+    timeGuess = round(nSnp*input$nBCperSNP*80/1000, digits = 3)
     nSnpStatement = paste0('You are requesting ', 
                            input$nBCperSNP, 
                            ' barcoded sequences for each of ', 
                            nSnp, 
                            ' snps. This yields a total of ', 
                            nSnp*input$nBCperSNP, ' 
-                             sequences. Each sequence takes roughly 30ms to be generated, so this request will require roughly <b>', 
+                             sequences. Each sequence takes roughly 80ms to be generated, so this request will require roughly <b>', 
                            timeGuess,
                            ' seconds </b>to process.')
     
