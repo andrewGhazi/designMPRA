@@ -6,8 +6,8 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer){
   expand = S4Vectors::expand
   select = dplyr::select
   
-  load('data/inertTenmers.RData') # just using these until 12mers are ready
-  mers = tenmers
+  load('~/designMPRA/outputs/inertTwelveMers.RData')
+  mers = twelvemers
   
   genome = BSgenome.Hsapiens.UCSC.hg38
   info(vcf)$rs = rownames(info(vcf))
@@ -144,14 +144,14 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer){
           bcsavailable = bcsavailable[-which(1:length(bcsavailable) == newbc.i)]
           bc[[bc.ind]] = newbc
           
-          i.list[1] = suppressWarnings(snpdat) #Add all the information into a list
+          i.list[1] = snpdat #Add all the information into a list #
           i.list[2] = typeval
           i.list[3] = k
           i.list[4] = bc.ind
           i.list[5] = newbc
           i.list[6] = final
           i.list[7] = info(snps)$rs[i]
-          snplist[bc.ind] = suppressWarnings(list(i.list)) #and put it into our final results list
+          snplist[bc.ind] = list(i.list) #and put it into our final results list
           bc.ind = bc.ind + 1
         }
         

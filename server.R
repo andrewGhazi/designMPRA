@@ -16,8 +16,8 @@ library(magrittr)
 source('~/designMPRA/scripts/processVCF.R')
 expand = S4Vectors::expand
 
-load('data/inertTenmers.RData') # just using these until 12mers are ready
-mers = tenmers
+load('~/designMPRA/outputs/inertTwelveMers.RData')
+mers = twelvemers
 
 shinyServer(function(input, output) {
 
@@ -60,6 +60,27 @@ shinyServer(function(input, output) {
     head(mtcars)
   })
   
+  output$timeText = renderText({
+    if (is.null(inVCF())) {
+      return(NULL)
+    }
+    
+    nSnp = inVCF() %>% expand %>% nrow
+    
+    timeGuess = round(nSnp*input$nBCperSNP*30/1000, digits = 3)
+    nSnpStatement = paste0('You are requesting ', 
+                           input$nBCperSNP, 
+                           ' barcoded sequences for each of ', 
+                           nSnp, 
+                           ' snps. This yields a total of ', 
+                           nSnp*input$nBCperSNP, ' 
+                             sequences. Each sequence takes roughly 30ms to be generated, so this request will require roughly <b>', 
+                           timeGuess,
+                           ' seconds </b>to process.')
+    
+    
+  })
+  
   vcfOut = eventReactive(input$Go, {
     print('We\'re in!')
     
@@ -75,6 +96,9 @@ shinyServer(function(input, output) {
     print(str(vcfOut()))
   })
 
+  output$failed = renderTable({
+    data.frame(snpID = vcfOut()$failed)
+  })
   
   output$inputHead = renderTable({
     if (is.null(inVCF())) {
