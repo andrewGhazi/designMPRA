@@ -73,22 +73,33 @@ shinyUI(fluidPage(
         tabPanel("Create sequences",
                  p('Here you can upload a VCF to automatically generate the necessary construct sequences for your own MPRA experiment. Only the CHROM, POS, REF, and ALT columns are used. Note that the input sequence context width is HALF of the total context (e.g. input of 75 yields 150bp of sequence context). '),
                  br(), 
+                 p('This diagram shows the layout of each MPRA construct sequence:'),
+                 br(),
+                 img(src = 'MPRAseqDiagram.png',
+                     align = 'center',
+                     width = 955,
+                     height = 20),
+                 br(),
+                 p(''),
                  p('Current constraints are: '),
                  tags$div(
                    tags$ul(
                      tags$li('sequence context comes from the hg38 assembly'),
                      tags$li('Restriction sites are limited to XbaI, KpnI, and SfiI as they are used in MPRA protocol published in Melnikov (2014) (which is intended to be used with the pMPRA1 vector series).'),
                      tags$li('Some snps may fail due to their sequence context containing or generating an undesired restriction site'),
-                     tags$li('Barcodes are constrained to being 10bp in length'),
-                     tags$li('The current total number of barcodes can be at most 131587. This is currently being addressed to increase this number to ~16 million.'),
+                     tags$li('Barcodes are constrained to being 12bp in length'),
+                     tags$li('The current total number of barcodes (the number of SNPs times the number of barcodes per SNP times 2 for reference/alternate alleles) can be at most 1,140,292.'),
                      tags$li('Insertions and deletions must encode the reference and mutant alleles (respectively) as a dash character \'-\'.')
                    )
                  ),
                  p('The outputs of this application are purely to make designing MPRA experiments more convenient for researchers. We make no guarantee as to the accuracy of the outputs and highly encourage you to methodically check your sequences before synthesizing your construct library.'),
                  br(),
+                 h4('Job Time Estimate'),
+                 htmlOutput('timeText'),
                  h4('Input head:'),
                  tableOutput('inputHead'),
-                 tableOutput('testHead'),
+                 h4('Failed snps:'),
+                 tableOutput('failed'),
                  value = 3),
         id = 'selectedTab'
       )
