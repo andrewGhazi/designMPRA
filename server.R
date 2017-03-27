@@ -98,7 +98,23 @@ shinyServer(function(input, output) {
       need(input$nBCperSNP*nrow(inVCF())*2 < 20000,
            'Your request will take too long (see the estimated time above). Try running the package version of this software locally.')
     )
-    processVCF(inVCF(), input$nBCperSNP, input$contextWidth, input$fwprimer, input$revprimer)
+    
+    style = 'notification'
+    progress = shiny::Progress$new(style = style, min = 0, max = 1)
+    progress$set(message = 'Generating sequences...', value = 0)
+    
+    
+    updateProgress <- function(value = NULL, detail = NULL) {
+      if (is.null(value)) {
+        value <- progress$getValue()
+        value <- value + (progress$getMax() - value) / 5
+      }
+      progress$set(value = value, detail = detail)
+    }
+    
+    res = processVCF(inVCF(), input$nBCperSNP, input$contextWidth, input$fwprimer, input$revprimer, updateProgress)
+    progress$close
+    return(res)
   })
   
   tmp = observeEvent(input$Go, {

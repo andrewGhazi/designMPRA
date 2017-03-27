@@ -61,7 +61,7 @@ generateDelConstruct = function(snpseq, refwidth) {
            length(snpseq)))
 }
 
-processSnp = function(snp, nper, seqwidth, fwprimer, revprimer){
+processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress = NULL){
   # snp is one row from the expanded vcf, including the reverseGene column which
   # indicates whether or not to use the reverse complement genomic context. It
   # also has a dedicated pool of barcodes to select from
@@ -344,10 +344,16 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer){
     stop('Sequence generation finished but barcodes are nonunique')
   }
   
+  # http://shiny.rstudio.com/gallery/progress-bar-example.html
+  if (is.function(updateProgress)) {
+    text <- paste0("Finished processing: ", snp$ID, ' ', snp$snpNums, ' / ', snp$snpTot)
+    updateProgress(value = snp$snpNums / snp$snpTot, detail = text)
+  }
+  
   return(res)
 }
 
-processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer){
+processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress = NULL){
   library(BSgenome.Hsapiens.UCSC.hg38)
   
   #expand = S4Vectors::expand
@@ -375,11 +381,13 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer){
   
   #Create a pool of barcodes for each snp
   vcf %<>% mutate(bcPools = split(mers, ceiling(base::sample(1:length(mers), size = length(mers))/(length(mers) / nrow(vcf)))),
-                  reverseGene = grepl('MPRAREV', INFO))
+                  reverseGene = grepl('MPRAREV', INFO),
+                  snpNums = 1:nrow(vcf),
+                  snpTot = nrow(vcf))
   
   processed = vcf %>% 
     rowwise %>% 
-    do(seqs = processSnp(., nper = nper, seqwidth = seqwidth, fwprimer, revprimer)) %>% 
+    do(seqs = processSnp(., nper = nper, seqwidth = seqwidth, fwprimer, revprimer, updateProgress)) %>% 
     mutate(dataNames = names(seqs) %>% list,
            failed = any(grepl('result', dataNames)))
   
