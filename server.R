@@ -9,12 +9,13 @@ library(shiny)
 library(tidyverse)
 library(stringr)
 library(pwr)
-library(VariantAnnotation)
+#library(VariantAnnotation)
 library(Biostrings)
-#library(BSgenome.Hsapiens.UCSC.hg38)
+library(BSgenome.Hsapiens.UCSC.hg38)
 library(magrittr)
-source('~/designMPRA/scripts/processVCF.R')
-expand = S4Vectors::expand
+#source('~/designMPRA/scripts/processVCF.R')
+source('~/designMPRA/scripts/processVCFfast.R')
+#expand = S4Vectors::expand
 
 load('~/designMPRA/outputs/inertTwelveMers.RData')
 mers = twelvemers
@@ -24,15 +25,16 @@ shinyServer(function(input, output) {
   output$powerPlot <- renderPlot({
 
     plotDat = data_frame(meanDiff = seq(0,5, by = .05),
-                         pwr = pwr.t.test(n = input$nbarcode,
+                         pwr = pwr.t.test(n = input$nbarcode*input$nBlock,
                                           d = meanDiff / input$sigma,
-                                          sig.level = .05 / input$nsnp)$power) # This is where the bonferonni correction somes in
+                                          sig.level = input$alpha / input$nsnp)$power) # This is where the bonferonni correction somes in
     
     ggplot(plotDat, aes(meanDiff, pwr)) + 
       geom_line() + 
-      xlab('Transcriptional Shift (absolute value)') + 
-      ylab('Power to detect difference in 1 transfection') + 
-      ylim(0,1)
+      xlab('Variant Transcriptional Shift (absolute value)') + 
+      ylab('Power to detect difference with given design') + 
+      ylim(0,1) + 
+      theme(text = element_text(size = 14))
 
   })
   
@@ -43,17 +45,20 @@ shinyServer(function(input, output) {
       return(NULL)
     }
     
-    # skipNum = system(paste0('grep ^## ', inVCF$datapath, ' | wc -l'), intern = TRUE) %>% as.numeric
-    # 
-    # #Check that the header doesn't have spaces in place of tabs. If it does, replace the spaces with tabs and create a new col_names variable
-    # vcfColumns = system(paste0('head -', skipNum + 1, ' ~/plateletMPRA/data/CD36_initial75_dbSNP.vcf | tail -1'), 
-    #                     intern = TRUE) %>% 
-    #   gsub('#', '', .) %>% 
-    #   gsub('[ ]+', '\t', .) %>% #replace spaces with tabs if applicable
-    #   str_split('\t') %>% 
-    #   unlist
+    # Screw it, we're going back to using readr. VariantAnnotation and GRanges are too irritating to work with.
+    skipNum = system(paste0('grep ^## ', inVCF$datapath, ' | wc -l'), intern = TRUE) %>% as.numeric
     
-    readVcf(inVCF$datapath, 'hg38')
+    #Check that the header doesn't have spaces in place of tabs. If it does, replace the spaces with tabs and create a new col_names variable
+    vcfColumns = system(paste0('head -', skipNum + 1, ' ', inVCF$datapath, ' | tail -1'), 
+                        intern = TRUE) %>% 
+      gsub('#', '', .) %>% 
+      gsub('[ ]+', '\t', .) %>% #replace spaces with tabs if applicable
+      str_split('\t') %>% 
+      unlist
+    
+    read_tsv(inVCF$datapath, 
+             skip = skipNum + 1,
+             col_names = vcfColumns)
   })
   
   output$testHead = eventReactive(input$Go, {
@@ -65,20 +70,20 @@ shinyServer(function(input, output) {
       return(NULL)
     }
     
-    nSnp = inVCF() %>% expand %>% nrow
+    nSnp = inVCF() %>% nrow
     
-    timeGuess = round(nSnp*input$nBCperSNP*80/1000, digits = 3)
+    timeGuess = round(nSnp*input$nBCperSNP*10/1000, digits = 3)
     nSnpStatement = paste0('You are requesting ', 
                            input$nBCperSNP, 
                            ' barcoded sequences for each of ', 
                            nSnp, 
                            ' snps. This yields a total of ', 
                            nSnp*input$nBCperSNP, ' 
-                             sequences. Each sequence takes roughly 80ms to be generated, so this request will require roughly <b>', 
+                             sequences. Each sequence takes roughly 10ms to be generated, so this request will require roughly <b>', 
                            timeGuess,
                            ' seconds </b>to process.')
     
-    
+    nSnpStatement
   })
   
   vcfOut = eventReactive(input$Go, {
@@ -88,6 +93,11 @@ shinyServer(function(input, output) {
       need(input$nBCperSNP > 0, 
            'Please input a number of barcodes to use per SNP')
       )
+    
+    validate(
+      need(input$nBCperSNP*nrow(inVCF())*2 < 20000,
+           'Your request will take too long (see the estimated time above). Try running the package version of this software locally.')
+    )
     processVCF(inVCF(), input$nBCperSNP, input$contextWidth, input$fwprimer, input$revprimer)
   })
   
@@ -106,11 +116,6 @@ shinyServer(function(input, output) {
     }
     
     inVCF() %>% 
-      rowRanges %>% 
-      as.data.frame %>% 
-      mutate(.,
-             ALT = ALT %>% map_chr(~as.character(paste(.x, collapse = ','))), 
-             snp = rownames(.)) %>% 
       head
   })
   

@@ -1,210 +1,406 @@
 #Function to take an input vcf and generate an output vcf with the specified context width and # of barcodes per snp
 # And now let's do it quickly using dplyr and purrr. processVCF
+library(stringr)
 
-spreadAllelesAcrossRows = 
+spreadAllelesAcrossRows = function(snp){
+  #snp is a row from a vcf data_frame
+  # if the 'ALT' column has commas in it, spread those out across otherwise identical rows
+  
+  if (!grepl(',', snp$ALT)) {
+    return(snp)
+  } else {
+    altAlleles = snp$ALT %>% str_split(',', simplify = TRUE)
+    res = snp[rep(1, length(altAlleles)),]
+    res$ALT = altAlleles %>% as.vector
+    return(res)
+  }
+}
 
-processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer){
-  library(BSgenome.Hsapiens.UCSC.hg38)
-  
-  expand = S4Vectors::expand
-  select = dplyr::select
-  
-  load('outputs/inertTwelveMers.RData')
-  mers = twelvemers
-  
-  genome = BSgenome.Hsapiens.UCSC.hg38
-  
-  vcf %<>% 
-    rowRanges %>% 
-    as.data.frame() %>% 
-    mutate(., rs = rownames(.)) %>% 
-    as.tbl() %>% 
-    mutate(ALT = map_chr(ALT, toString),
-           REF = map_chr(REF, toString))
-  info(vcf)$rs = rownames(info(vcf))
-  snps = vcf %>% expand
-  
-  genome = BSgenome.Hsapiens.UCSC.hg38
-  
-  #seqwidthOG = seqwidth
-  fwprimer %<>% DNAString 
-  revprimer %<>% DNAString
+countDigSites = function(biostring) {
+  #Count the number of times KpnI, XbaI, and SfiI sites occur in a given biostring
   
   kpn = DNAString('GGTACC') #KpnI
   xba = DNAString('TCTAGA') #XbaI
   sfi = DNAString('GGCCNNNNNGGCC') #SfiI
+                  
+  sum(countPattern(kpn, biostring),
+      countPattern(xba, biostring),
+      countPattern(sfi, biostring, fixed = FALSE),
+      countPattern(kpn %>% reverse, biostring),
+      countPattern(xba %>% reverse, biostring),
+      countPattern(sfi %>% reverse, biostring, fixed = FALSE))
+}
+
+generateInsConstruct = function(snpseq, mid, reverseGene, seqwidth){
+  #This function generates a mutant construct sesquence based on 
+  # snpseq - the genomic context 
+  # mid - the insertion allele
+  # reverseGene - a logical indicating whether or not the SNP is for a gene that's reversed
+  # seqwidth - the width of the context
   
-  maxbc = length(snps)*2*nper
-  bcsavailable = 1:length(mers)
+  # If the insertion is for a gene that's transcribed from the reverse strand, it needs to be the COMPLEMENT of the allele to the LEFT of the position
+  # Otherwise it's the mutant allele to the right of the position
   
-  bc = vector(mode = 'character', length = maxbc) %>% DNAStringSet
+  if (reverseGene) {
+    toString(c(subseq(snpseq, 1, seqwidth), #The insertion goes to the right of the position given
+               complement(mid),
+               subseq(snpseq, seqwidth + 1, length(snpseq))))
+  } else {
+    toString(c(subseq(snpseq, 1, seqwidth + 1), #The insertion goes to the right of the position given
+               mid,
+               subseq(snpseq, seqwidth + 2, length(snpseq))))
+  }
+}
+
+generateDelConstruct = function(snpseq, refwidth) {
+  c(subseq(snpseq,
+           1, 
+           seqwidth),
+    subseq(snpseq,
+           seqwidth + refwidth + 1,
+           length(snpseq)))
+}
+
+processSnp = function(snp, nper, seqwidth, fwprimer, revprimer){
+  # snp is one row from the expanded vcf, including the reverseGene column which
+  # indicates whether or not to use the reverse complement genomic context. It
+  # also has a dedicated pool of barcodes to select from
   
-  bc.ind = 1
   
-  snplist = vector('list', maxbc) #This will contain all of the final information for each oligo
-  i.list = vector('list', 7) #The info for each construct gets put into this list, then this gets assigned to the right element of snplist
-  names(i.list) = c('snpdat', 'type', 'constructindex', 'totindex', 'barcode', 'seq', 'rs')
+  isSNV = (snp$REF %in% c('A', 'C', 'G', 'T') && snp$ALT %in% c('A', 'C', 'G', 'T'))
+  isINS = snp$REF == '-'
+  isDEL = snp$ALT == '-'
   
-  for (i in 1:length(snps)) {
+  #There are three code blocks below for each of these cases. Use RStudio's code folding to open up only the one of interest.
+  # This could probably be made to be 1/3 the length by writing a function that
+  # adapts to the type of SNP when generating the sequences, but that might be
+  # hard. There are subtle differences in each of the types of variants.
+  
+  if (isSNV) {
     
-    # get +/- seqwidth position
-    rangestart = start(ranges(rowRanges(snps)))[i] - seqwidth
-    rangeend = end(ranges(rowRanges(snps)))[i] + seqwidth
+    rangestart = snp$POS - seqwidth
+    rangeend = snp$POS + seqwidth
     
-    snpseq = subseq(genome[[paste0('chr', as.character(seqnames(rowRanges(snps))[i]))]], # the chrom field needs to be only digits
+    snpseq = subseq(genome[[paste0('chr', as.character(snp$CHROM))]], # the chrom field needs to be only digits
                     start = rangestart, 
                     end = rangeend)
-    snpdat = snps %>% .[i] %>% rowRanges
     
+    ndigsite = countDigSites(snpseq)
     
-    for (j in 1:2) { #1 = Ref, 2 = Mut
+    if (ndigsite > 0) {
+      failureRes = data_frame(ID = snp$ID,
+                              CHROM = snp$CHROM,
+                              POS = snp$POS,
+                              REF = snp$REF,
+                              ALT = snp$ALT,
+                              result = 'Failed - Context contained a digestion site')
+      return(failureRes)
+    }
+    
+    refseq = toString(snpseq)
+    altseq = toString(replaceLetterAt(snpseq, seqwidth + 1, snp$ALT))
+    
+    res = data_frame(ID = snp$ID,
+                     CHROM = snp$CHROM,
+                     snpIndex = 1:(nper*2),
+                     type = rep(c('ref', 'alt'), each = nper), 
+                     mid = ifelse(type == 'ref', snp$REF, snp$ALT),
+                     barcodes = sample(snp$bcPools %>% unlist, 
+                                       2*nper),
+                     constrseq = type %>% map_chr(~ifelse(.x == 'ref',
+                                                          refseq,
+                                                          altseq)))
+    
+    if (snp$reverseGene) {
+      res %<>% mutate(constrseq = constrseq %>% map_chr(~toString(reverseComplement(.x))))
+    }
+    
+    res %<>% mutate(sequence = paste0(fwprimer,
+                                      'TG',
+                                      constrseq,
+                                      kpn,
+                                      xba,
+                                      barcodes,
+                                      'GGC',
+                                      revprimer),
+                    ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+    
+    #If all of the sequences contained > 3 digestion sites, there's probably some location at the context/other parts boundary that generates a site. This is too complicated to fix automatically, so just fail the SNP
+    
+    if (all(res$ndigSites > 3)) {
+      failureRes = data_frame(ID = snp$ID,
+                              CHROM = snp$CHROM,
+                              POS = snp$POS,
+                              REF = snp$REF,
+                              ALT = snp$ALT,
+                              result = 'Failed - SNP sequence could not be generated without an aberrant digestion site')
+      return(failureRes)
+    }
+    
+    if (any(res$ndigSites > 3)) {
+      #divide the results into broken and working sequences
+      working = res %>% filter(ndigSites <= 3)
+      broken = res %>% filter(ndigSites > 3)
       
-      #This if else block generates the genomic sequence with or without the mutant allele
-      if (j == 1) { #if you're doing the reference sequence
-        #mid = ref(snps)[[i]]
-        constrseq = snpseq
-        typeval = 'Ref'
-      } else {#if you're doing the mutant sequence
-        
-        mid = alt(snps)[[i]] #get the mutant allele #I spread out the row with two alternate alleles across two rows earlier
-        
-        refwidth = snps %>% ref %>% width %>% .[i] #get the width of the reference allele
-        refall = ref(snps)[[i]] #get the reference allele
-        
-        isSNV = (refall  %>% toString %in% c('A', 'G', 'T', 'C')) & (mid %>% toString %in% c('A', 'G', 'T', 'C'))
-        isdel = mid %>% toString == '-' #THIS DOESN'T WORK FOR SNPS IN GENERAL, JUST THE ONES LEN SENT US
-        isins = refall %>% toString == '-' #THIS DOESN'T WORK FOR SNPS IN GENERAL, JUST THE ONES LEN SENT US
-        
-        if (isSNV) { #if the SNP is an SNV
-          constrseq = c(subseq(snpseq, 1, seqwidth), 
-                        mid, 
-                        subseq(snpseq, seqwidth + 2, nchar(snpseq))) #construct sequence
-        } else if (isdel) { #if the SNP is a deletion
-          constrseq = c(subseq(snpseq, 1, seqwidth), 
-                        subseq(snpseq, seqwidth + refwidth + 1, nchar(snpseq))) #construct sequence
-        } else if (isins) {  #if the SNP is an insertion
-          constrseq = c(subseq(snpseq, 1, seqwidth), 
-                        mid, 
-                        subseq(snpseq, seqwidth + 1, nchar(snpseq))) #construct sequence
-        } else{
-          stop(paste0(info(expand(vcf))$rs[i], ' was not able to be classified as a SNV, deletion, or insertion'))
-        }
-        
-        typeval = 'Mut'
-      }
+      #remove the barcodes for the sequences that work
+      brokenPool = snp$bcPools[!(unlist(snp$bcPools) %in% working$barcodes)] %>% unlist
       
-      # This block generates the specified number of constructs per allele
-      for (k in 1:nper) {
-        
-        #Randomly choose from the barcodes available
-        newbc.i = sample.int(bcsavailable %>% length, 1) 
-        newbc = mers[[bcsavailable[newbc.i]]]
-        
-        final = c(fwprimer, #This is the statements that concatenates all of the elements together
-                  DNAString('TG'), # Not sure what the purpose of this is but Len said to add it
-                  constrseq, 
-                  kpn, 
-                  xba, 
-                  newbc, 
-                  DNAString('GGC'),
-                  revprimer)
-        
-        #count how many digestion sites occur. Should only be the two we intentionally add in.
-        ndigsite = sum(countPattern(kpn, final), # This should be 1
-                       countPattern(xba, final), # This should be 1
-                       countPattern(sfi, final, fixed = FALSE), #fixed = FALSE allows the ambiguity code in sfi to match any letter instead of just 'N' # This should be 0, also in promoter #because of the added GGC this is now 1
-                       countPattern(kpn %>% rev, final), #This should be 0
-                       countPattern(xba %>% rev, final), #This should be 0
-                       countPattern(sfi %>% rev, final, fixed = FALSE)) # This should be 0
-        
-        bcattempts = 1
-        while(ndigsite>3 && bcattempts < 6){ # if any extra digestion sites are created, keep trying until you only have the two you need
-          #This could happen by weirdness at the junctions that is hard to account for so just keep trying until it works
-          #There have to be the two we put in deliberately
-          newbc.i = sample.int(bcsavailable %>% length, 1)
-          newbc = mers[[bcsavailable[newbc.i]]]
-          final = c(fwprimer, #This is the statements that concatenates all of the elements together
-                    DNAString('TG'), # Not sure what the purpose of this is but Len said to add it
-                    constrseq, 
-                    kpn, 
-                    xba, 
-                    newbc, 
-                    DNAString('GGC'),
-                    revprimer)
-          #lens = c(fwprimer %>% length, constrseq %>% length, kpn %>% length, xba %>% length, newbc %>% length, revprimer %>% length)
-          ndigsite = sum(countPattern(kpn, final), # This should be 1
-                         countPattern(xba, final), # This should be 1
-                         countPattern(sfi, final, fixed = FALSE), #fixed = FALSE allows the ambiguity code in sfi to match any letter instead of just 'N' # This should be 0
-                         countPattern(kpn %>% rev, final), #This should be 0
-                         countPattern(xba %>% rev, final), #This should be 0
-                         countPattern(sfi %>% rev, final, fixed = FALSE)) # This should be 0
-          bcattempts = bcattempts + 1
-          #if(bcattempts>5){stop('5 barcodes were attempted without success. Something fishy\'s goin\' on around heah\'')}
-        }
-        
-        if (bcattempts > 5){
-          
-          # the snp is bad. Increment the barcode index (leaving the intermediate elements of the final snp list blank) and break
-          bc.ind = bc.ind + nper
-          break
-          
-        } else {
-          # the snp is good
-          
-          #and at this point we know the tag used is good, so we remove it from the list of barcodes available
-          bcsavailable = bcsavailable[-which(1:length(bcsavailable) == newbc.i)]
-          bc[[bc.ind]] = newbc
-          
-          i.list[1] = snpdat #Add all the information into a list #
-          i.list[2] = typeval
-          i.list[3] = k
-          i.list[4] = bc.ind
-          i.list[5] = newbc
-          i.list[6] = final
-          i.list[7] = info(snps)$rs[i]
-          snplist[bc.ind] = list(i.list) #and put it into our final results list
-          bc.ind = bc.ind + 1
-        }
-        
+      while (any(res$ndigSites > 3)) {
+        #For the subset of sequences that don't work, resample the barcodes and try again.
+        fixed = broken %>% mutate(barcodes = sample(brokenPool, 
+                                                    nrow(broken)),
+                                  sequence = paste0(fwprimer,
+                                                    'TG',
+                                                    constrseq,
+                                                    kpn,
+                                                    xba,
+                                                    barcodes,
+                                                    'GGC',
+                                                    revprimer),
+                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+        res = rbind(working, fixed)
       }
     }
-    cat(i)
-    #setTxtProgressBar(pb, i)
-  }; #close(pb)
-  
-  
-  #Some munging to account for snps we couldn't get because they either missed one allele or both entirely
-  resDat = data_frame(startList = snplist,
-                      nll = startList %>% map_lgl(~!is.null(.x))) %>% 
-    filter(nll) %>% 
-    mutate(rs = startList %>% map_chr(~.x$rs),
-           type = startList %>% map_chr(~.x$type)) %>% 
-    group_by(rs) %>% 
-    summarise(bothTypes = length(type))
-  
-  gotBoth = resDat %>% filter(bothTypes > nper) %>% .$rs
-  
-  snplist = snplist[-which(sapply(snplist, is.null))]
-  snplist = snplist[(snplist %>% map_chr(~.x$rs) %>% unique) %in% gotBoth]
-  
-  for (x in 1:length(snplist)) {
-    snplist[[x]]$totindex = x
+  } else if (isINS) {
+    
+    #If the snp is an insertion, the range of context to get is the same, but the middle allele (variable 'mid') is different
+    rangestart = snp$POS - seqwidth
+    rangeend = snp$POS + seqwidth
+    
+    snpseq = subseq(genome[[paste0('chr', as.character(snp$CHROM))]], # the chrom field needs to be only digits
+                    start = rangestart, 
+                    end = rangeend)
+    
+    if (snp$reverseGene) {
+      snpseq %<>% reverseComplement()
+    }
+    
+    ndigsite = countDigSites(snpseq)
+    
+    if (ndigsite > 0) {
+      failureRes = data_frame(ID = snp$ID,
+                              CHROM = snp$CHROM,
+                              POS = snp$POS,
+                              REF = snp$REF,
+                              ALT = snp$ALT,
+                              result = 'Failed - Context contained a digestion site')
+      return(failureRes)
+    }
+    
+    altseq = generateInsConstruct(snpseq, DNAString(snp$ALT), snp$reverseGene, seqwidth)
+    res = data_frame(ID = snp$ID,
+                     CHROM = snp$CHROM,
+                     snpIndex = 1:(nper*2),
+                     type = rep(c('ref', 'alt'), each = nper), 
+                     mid = ifelse(type == 'ref', '', snp$ALT), #This line is line is unique to the isINS block
+                     barcodes = sample(snp$bcPools %>% unlist, 
+                                       2*nper),
+                     constrseq = map2_chr(mid, type, ~ifelse(.y == 'ref', 
+                                                             toString(snpseq),
+                                                             altseq)),
+                     sequence = paste0(fwprimer,
+                                       'TG',
+                                       constrseq,
+                                       kpn,
+                                       xba,
+                                       barcodes,
+                                       'GGC',
+                                       revprimer),
+                     ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+    
+    #If all of the sequences contained > 3 digestion sites, there's probably some location at the context/other parts boundary that generates a site. This is too complicated to fix automatically, so just fail the SNP
+    
+    if (all(res$ndigSites > 3)) {
+      failureRes = data_frame(ID = snp$ID,
+                              CHROM = snp$CHROM,
+                              POS = snp$POS,
+                              REF = snp$REF,
+                              ALT = snp$ALT,
+                              result = 'Failed - SNP sequence could not be generated without an aberrant digestion site')
+      return(failureRes)
+    }
+    
+    if (any(res$ndigSites > 3)) {
+      #divide the results into broken and working sequences
+      working = res %>% filter(ndigSites <= 3)
+      broken = res %>% filter(ndigSites > 3)
+      
+      #remove the barcodes for the sequences that work
+      brokenPool = snp$bcPools[!(unlist(snp$bcPools) %in% working$barcodes)] %>% unlist
+      
+      while (any(res$ndigSites > 3)) {
+        #For the subset of sequences that don't work, resample the barcodes and try again.
+        fixed = broken %>% mutate(barcodes = sample(brokenPool, 
+                                                    nrow(broken)),
+                                  sequence = paste0(fwprimer,
+                                                    'TG',
+                                                    constrseq,
+                                                    kpn,
+                                                    xba,
+                                                    barcodes,
+                                                    'GGC',
+                                                    revprimer),
+                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+        res = rbind(working, fixed)
+      }
+    }
+  } else if (isDEL) {
+    refwidth = nchar(snp$REF)
+    rangestart = snp$POS - seqwidth
+    rangeend = snp$POS + seqwidth
+    
+    snpseq = subseq(genome[[paste0('chr', as.character(snp$CHROM))]], # the chrom field needs to be only digits
+                    start = rangestart, 
+                    end = rangeend)
+    
+    ndigsite = countDigSites(snpseq)
+    
+    if (ndigsite > 0) {
+      failureRes = data_frame(ID = snp$ID,
+                              CHROM = snp$CHROM,
+                              POS = snp$POS,
+                              REF = snp$REF,
+                              ALT = snp$ALT,
+                              result = 'Failed - Context contained a digestion site')
+      return(failureRes)
+    }
+    
+    altseq = generateDelConstruct(snpseq, refwidth)
+    
+    res = data_frame(ID = snp$ID,
+                     CHROM = snp$CHROM,
+                     snpIndex = 1:(nper*2),
+                     type = rep(c('ref', 'alt'), each = nper), 
+                     mid = ifelse(type == 'ref', snp$REF, snp$ALT),
+                     barcodes = sample(snp$bcPools %>% unlist, 
+                                       2*nper),
+                     constrseq = map(type, ~if (.x == 'ref') {snpseq} else {altseq}))
+    
+    if (snp$reverseGene) {
+      res %<>% mutate(constrseq = constrseq %>% map_chr(~toString(reverseComplement(.x))))
+    } else {
+      res %<>% mutate(constrseq = constrseq %>% map_chr(~toString(.x)))
+    }
+    
+    res %<>% mutate(sequence = paste0(fwprimer,
+                                      'TG',
+                                      constrseq,
+                                      kpn,
+                                      xba,
+                                      barcodes,
+                                      'GGC',
+                                      revprimer),
+                    ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+    
+    #If all of the sequences contained > 3 digestion sites, there's probably some location at the context/other parts boundary that generates a site. This is too complicated to fix automatically, so just fail the SNP
+    
+    if (all(res$ndigSites > 3)) {
+      failureRes = data_frame(ID = snp$ID,
+                              CHROM = snp$CHROM,
+                              POS = snp$POS,
+                              REF = snp$REF,
+                              ALT = snp$ALT,
+                              result = 'Failed - SNP sequence could not be generated without an aberrant digestion site')
+      return(failureRes)
+    }
+    
+    if (any(res$ndigSites > 3)) {
+      #divide the results into broken and working sequences
+      working = res %>% filter(ndigSites <= 3)
+      broken = res %>% filter(ndigSites > 3)
+      
+      #remove the barcodes for the sequences that work
+      brokenPool = snp$bcPools[!(unlist(snp$bcPools) %in% working$barcodes)] %>% unlist
+      
+      while (any(res$ndigSites > 3)) {
+        #For the subset of sequences that don't work, resample the barcodes and try again.
+        fixed = broken %>% mutate(barcodes = sample(brokenPool, 
+                                                    nrow(broken)),
+                                  sequence = paste0(fwprimer,
+                                                    'TG',
+                                                    constrseq,
+                                                    kpn,
+                                                    xba,
+                                                    barcodes,
+                                                    'GGC',
+                                                    revprimer),
+                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+        res = rbind(working, fixed)
+      }
+    }
+    
+  } else {
+    failureRes = data_frame(ID = snp$ID,
+                            CHROM = snp$CHROM,
+                            POS = snp$POS,
+                            REF = snp$REF,
+                            ALT = snp$ALT,
+                            result = 'Failed - Not identifiable as SNV, insertion, or deletion.')
+    return(failureRes)
   }
   
-  resdf = data_frame(res = snplist,
-                     totIndex = res %>% map_int(~.x$totindex),
-                     constructIndex = res %>% map_int(~.x$constructindex),
-                     rs = res %>% map_chr(~.x$rs),
-                     type = res %>% map_chr(~.x$type),
-                     ref = res %>% map_chr(~toString(.x$snpdat$REF)),
-                     alt = res %>% map_chr(~toString(.x$snpdat$ALT)),
-                     barcode = res %>% map_chr(~toString(.x$barcode)),
-                     seq = res %>% map_chr(~toString(.x$seq))) %>% 
-    select(-res)
+  # Do some checks that all the barcodes are unique and otherwise return the result. 
+  if (length(unique(res$barcodes)) != nrow(res)) { # This should never happen.
+    stop('Sequence generation finished but barcodes are nonunique')
+  }
   
-  inputRS = rownames(info(vcf))
-  failedSnps = inputRS[!(inputRS %in% resdf$rs)]
-  res = list(result = resdf, failed = failedSnps)
-  write_tsv(resdf, paste0('~/designMPRA/outputs/seqFileOutputs/', Sys.Date() %>% gsub('-', '_', .), '.tsv'))
+  return(res)
+}
+
+processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer){
+  library(BSgenome.Hsapiens.UCSC.hg38)
+  
+  #expand = S4Vectors::expand
+  select = dplyr::select
+  
+  vcf %<>% 
+    by_row(spreadAllelesAcrossRows) %>% 
+    .$.out %>% 
+    Reduce('rbind', .)
+  
+  if (nrow(vcf)*2*nper > 1140292) {
+    stop('Your design requests requires more barcodes than is possible')
+  }
+  
+  load('outputs/inertTwelveMersChar.RData')
+  mers = twelvemers
+  
+  genome = BSgenome.Hsapiens.UCSC.hg38
+  
+  kpn = 'GGTACC' #KpnI
+  xba = 'TCTAGA' #XbaI
+  sfi = 'GGCCNNNNNGGCC' #SfiI
+  
+  maxbc = nrow(vcf)*2*nper
+  
+  #Create a pool of barcodes for each snp
+  vcf %<>% mutate(bcPools = split(mers, ceiling(base::sample(1:length(mers), size = length(mers))/(length(mers) / nrow(vcf)))),
+                  reverseGene = grepl('MPRAREV', INFO))
+  
+  processed = vcf %>% 
+    rowwise %>% 
+    do(seqs = processSnp(., nper = nper, seqwidth = seqwidth, fwprimer, revprimer)) %>% 
+    mutate(dataNames = names(seqs) %>% list,
+           failed = any(grepl('result', dataNames)))
+  
+  failures = processed %>% 
+    filter(failed) %>% 
+    select(seqs) %>% 
+    unnest %>% 
+    rename(reason = result)
+  
+  successes = processed %>%
+    filter(!failed) %>% 
+    .$seqs %>% 
+    Reduce('rbind', .) %>% 
+    mutate(.,
+           constrseq = constrseq %>% unlist, # not sure how this got turned into a list
+           totIndex = 1:nrow(.)) %>% 
+    rename(allele = mid,
+           barcode = barcodes) %>% 
+    select(ID, type, allele, snpIndex, totIndex, barcode, sequence)
+
+  res = list(result = successes, failed = failures)
+  write_tsv(successes, paste0('outputs/seqFileOutputs/', Sys.Date() %>% gsub('-', '_', .), '.tsv'))
   return(res)
 }
