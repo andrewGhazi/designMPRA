@@ -113,7 +113,7 @@ shinyServer(function(input, output) {
     }
     
     res = processVCF(inVCF(), input$nBCperSNP, input$contextWidth, input$fwprimer, input$revprimer, updateProgress)
-    progress$close
+    on.exit(progress$close())
     return(res)
   })
   
