@@ -346,7 +346,7 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
   
   # http://shiny.rstudio.com/gallery/progress-bar-example.html
   if (is.function(updateProgress)) {
-    text <- paste0("Finished processing: ", snp$ID, ' ', snp$snpNums, ' / ', snp$snpTot)
+    text <- paste0(snp$ID, ' completed -- ', snp$snpNums, ' / ', snp$snpTot)
     updateProgress(value = snp$snpNums / snp$snpTot, detail = text)
   }
   
