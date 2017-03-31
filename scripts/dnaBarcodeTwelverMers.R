@@ -6,8 +6,8 @@ library(tidyverse)
 select = dplyr::select
 
 myTwelveMers = create.dnabarcodes(12,
-                               heuristic = 'ashlock',
-                               cores = 12,
-                               iterations = 110)
+                                  heuristic = 'ashlock',
+                                  cores = 12,
+                                  iterations = 110)
 
 save(myTwelveMers, file = 'outputs/12mersRaw.RData')

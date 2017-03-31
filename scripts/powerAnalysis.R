@@ -67,7 +67,7 @@ deseqRes %<>%
   mutate(construct = resNames)
 
 #### Let's see how well these correspond to the wilcox tests ####
-load('data/gatheredMPRA.RData')
+load('~/MPRA/data/gatheredMPRA.RData')
 goodCon = MPRA.qnactivity %>% 
   filter(!grepl('GATA', Block)) %>% 
   group_by(construct) %>% 
