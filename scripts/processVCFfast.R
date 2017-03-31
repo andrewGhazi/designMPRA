@@ -52,7 +52,7 @@ generateInsConstruct = function(snpseq, mid, reverseGene, seqwidth){
   }
 }
 
-generateDelConstruct = function(snpseq, refwidth) {
+generateDelConstruct = function(snpseq, refwidth, seqwidth) {
   c(subseq(snpseq,
            1, 
            seqwidth),
@@ -66,6 +66,10 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
   # indicates whether or not to use the reverse complement genomic context. It
   # also has a dedicated pool of barcodes to select from
   
+  genome = BSgenome.Hsapiens.UCSC.hg38
+  kpn = 'GGTACC' #KpnI
+  xba = 'TCTAGA' #XbaI
+  sfi = 'GGCCNNNNNGGCC' #SfiI
   
   isSNV = (snp$REF %in% c('A', 'C', 'G', 'T') && snp$ALT %in% c('A', 'C', 'G', 'T'))
   isINS = snp$REF == '-'
@@ -245,6 +249,8 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
       }
     }
   } else if (isDEL) {
+    
+    genome = BSgenome.Hsapiens.UCSC.hg38
     refwidth = nchar(snp$REF)
     rangestart = snp$POS - seqwidth
     rangeend = snp$POS + seqwidth
@@ -265,7 +271,7 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
       return(failureRes)
     }
     
-    altseq = generateDelConstruct(snpseq, refwidth)
+    altseq = generateDelConstruct(snpseq, refwidth, seqwidth)
     
     res = data_frame(ID = snp$ID,
                      CHROM = snp$CHROM,
@@ -355,6 +361,8 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
 
 processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress = NULL){
   library(BSgenome.Hsapiens.UCSC.hg38)
+  library(magrittr)
+  library(tidyverse)
   
   #expand = S4Vectors::expand
   select = dplyr::select
@@ -371,19 +379,20 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
   load('outputs/inertTwelveMersChar.RData')
   mers = twelvemers
   
-  genome = BSgenome.Hsapiens.UCSC.hg38
-  
-  kpn = 'GGTACC' #KpnI
-  xba = 'TCTAGA' #XbaI
-  sfi = 'GGCCNNNNNGGCC' #SfiI
-  
-  maxbc = nrow(vcf)*2*nper
+  # kpn = 'GGTACC' #KpnI
+  # xba = 'TCTAGA' #XbaI
+  # sfi = 'GGCCNNNNNGGCC' #SfiI
+  # 
+  # maxbc = nrow(vcf)*2*nper
   
   #Create a pool of barcodes for each snp
-  vcf %<>% mutate(bcPools = split(mers, ceiling(base::sample(1:length(mers), size = length(mers))/(length(mers) / nrow(vcf)))),
+  vcf %<>% mutate(bcPools = split(mers, ceiling(1:length(mers)/(length(mers) / nrow(vcf)))),
                   reverseGene = grepl('MPRAREV', INFO),
                   snpNums = 1:nrow(vcf),
                   snpTot = nrow(vcf))
+  
+  print(sessionInfo())
+  #writeLines(capture.output(sessionInfo()), "/mnt/labhome/andrew/designMPRA/sessionInfo.txt")
   
   processed = vcf %>% 
     rowwise %>% 
@@ -391,11 +400,13 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
     mutate(dataNames = names(seqs) %>% list,
            failed = any(grepl('result', dataNames)))
   
+  #writeLines(capture.output(sessionInfo()), "/mnt/labhome/andrew/designMPRA/sessionInfoEnd.txt")
+  
   failures = processed %>% 
     filter(failed) %>% 
     select(seqs) %>% 
     unnest %>% 
-    rename(reason = result)
+    dplyr::rename(reason = result)
   
   successes = processed %>%
     filter(!failed) %>% 
@@ -404,11 +415,11 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
     mutate(.,
            constrseq = constrseq %>% unlist, # not sure how this got turned into a list
            totIndex = 1:nrow(.)) %>% 
-    rename(allele = mid,
+    dplyr::rename(allele = mid,
            barcode = barcodes) %>% 
     select(ID, type, allele, snpIndex, totIndex, barcode, sequence)
 
   res = list(result = successes, failed = failures)
-  write_tsv(successes, paste0('outputs/seqFileOutputs/', Sys.Date() %>% gsub('-', '_', .), '.tsv'))
+  #write_tsv(successes, paste0('outputs/seqFileOutputs/', Sys.Date() %>% gsub('-', '_', .), '.tsv'))
   return(res)
 }

@@ -14,11 +14,10 @@ library(Biostrings)
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(magrittr)
 #source('~/designMPRA/scripts/processVCF.R')
-source('~/designMPRA/scripts/processVCFfast.R')
+source('scripts/processVCFfast.R')
 #expand = S4Vectors::expand
+rename = dplyr::rename
 
-load('~/designMPRA/outputs/inertTwelveMers.RData')
-mers = twelvemers
 
 shinyServer(function(input, output) {
 
@@ -34,7 +33,7 @@ shinyServer(function(input, output) {
       xlab('Variant Transcriptional Shift (absolute value)') + 
       ylab('Power to detect difference with given design') + 
       ylim(0,1) + 
-      theme(text = element_text(size = 14))
+      theme(text = element_text(size = 15))
 
   })
   
@@ -72,14 +71,14 @@ shinyServer(function(input, output) {
     
     nSnp = inVCF() %>% nrow
     
-    timeGuess = round(nSnp*input$nBCperSNP*10/1000, digits = 3)
+    timeGuess = round(nSnp*input$nBCperSNP*10/1000 + 5, digits = 3)
     nSnpStatement = paste0('You are requesting ', 
                            input$nBCperSNP, 
                            ' barcoded sequences for each of ', 
                            nSnp, 
                            ' snps. This yields a total of ', 
                            nSnp*input$nBCperSNP, ' 
-                             sequences. Each sequence takes roughly 10ms to be generated, so this request will require roughly <b>', 
+                             sequences. After a brief setup period, each sequence takes roughly 10ms to be generated, so this request will require roughly <b>', 
                            timeGuess,
                            ' seconds </b>to process.')
     
@@ -117,6 +116,21 @@ shinyServer(function(input, output) {
     return(res)
   })
   
+  output$warnText = renderText({
+    if (!is.null(inVCF()) && input$nBCperSNP*nrow(inVCF())*2 > 20000) {
+      return('The total number of barcoded sequences must be less than 20,000.')
+    } else {
+      return('')
+    }
+  })
+  
+  output$conditionalDownload = renderUI({
+    if (!is.null(vcfOut())) {
+      downloadButton('downloadSequences', 'Download Output')
+    } else {
+      NULL
+    }
+  })
   tmp = observeEvent(input$Go, {
     print('test')
     print(str(vcfOut()))

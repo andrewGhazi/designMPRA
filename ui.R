@@ -46,25 +46,32 @@ shinyUI(fluidPage(
                                             value = 'CTCGGCGGCC'),
                                   fileInput('vcf',
                                             label = 'Input VCF'),
+                                  h5('Messages:'),
+                                  htmlOutput('timeText'),
+                                  br(),
+                                  textOutput('warnText'),
+                                  tags$hr(),
                                   actionButton('Go',
                                                label = 'Go!'),
-                                  downloadButton('downloadSequences', 'Download Output'))),
+                                  uiOutput('conditionalDownload')), width = 2),
     mainPanel(
       tabsetPanel(
         tabPanel("MPRA", 
                  p("Massively parallel reporter assays (MPRA) are high-throughput assays designed to inspect the transcriptional effects of many variants in parallel. See the diagram below for a graphical explanation."),
-                 br(),
+                 h3('Statistical Parameters'),
                  p("The \"activity\" of an allele is defined as the log-ratio of the output mRNA count to the input DNA count for a given allele. Because there is significant noise in these counts, allele constructs are replicated across multiple barcodes. The observed activity of each barcode is taken as one observation of the activity of the allele. The \"transcriptional shift\" of a variant is defined as the difference in activity between the mutant and reference alleles. Thus variants that increase transcription (e.g. the red variant in the diagram below) have a positive transcriptional shift and those that decrease transcription (e.g. the blue variant) have a negative shift."),
                  br(),
-                 img(src = 'formulas.png',
-                     align = 'center',
+                 div(img(src = 'formulas.png',
                      width = 728,
                      height = 102),
+                     style = 'text-align: center;'),
+                 br(),
                  p("This application aims to help researchers understand the relationships between power, noise, and experimental design in MPRAs. Optimizing experimental design is critical for sensitivity in a MPRA assay -- the variance of how many transcripts a single cell makes from a single DNA molecule can be extremely high. Multiple testing corrections further reduce sensitivity. Repeated transfections combined with quantile normalization to remove batch effects can be an effective way of improving power, however this comes at the price of increased sequencing needs."),
-                 img(src = 'MPRAdiagram.png',
-                     align = 'center',
+                 h3('MPRA experimental diagram'),
+                 div(img(src = 'MPRAdiagram.png',
                      width = 723,
                      height = 947),
+                     style = 'text-align: center;'),
                  p(''),
                  br(),
                  p(''),
@@ -98,18 +105,21 @@ shinyUI(fluidPage(
                      tags$li('Number of barcodes per SNP'),
                      tags$li('PCR primers')
                  )),
-                 p(),
                  h4('VCFs'),
                  p('Only the CHROM, POS, REF, and ALT columns are used. The INFO column is used only for detecting reverse strand constructs.'),
                  p('Current input constraints are: '),
                  tags$div(
                    tags$ul(
-                     tags$li('Restriction sites are limited to XbaI, KpnI, and SfiI as they are used in MPRA protocol published in Melnikov (2014) (which is intended to be used with the pMPRA1 vector series).'),
+                     tags$li('Restriction sites are limited to XbaI, KpnI, and SfiI as they are used in MPRA protocol published in',
+                             a(href = "https://www.jove.com/video/51719/massively-parallel-reporter-assays-in-cultured-mammalian-cells", 'Melnikov (2014)'),
+                             '(which is intended to be used with the',
+                             a(href = "https://www.addgene.org/49349/", 'pMPRA1 vector series'),
+                             ').'),
                      tags$li('Barcodes are constrained to being 12bp in length'),
-                     tags$li('The current total number of barcodes (the number of SNPs times the number of barcodes per SNP times 2 for reference/alternate alleles) can be at most 1,140,292.'),
                      tags$li('Insertions and deletions must encode the reference and mutant alleles (respectively) as a dash character \'-\'.'),
                      tags$li('Multiple alternate alleles should be separated in the ALT field by a comma and no spaces'),
-                     tags$li('By default, the program pulls the sequence context from the forward (+) strand of the reference genome. If the user wishes to generate SNPs for genes that normally are read from the reverse strand, add a string containing "MPRAREV" to the INFO field of the VCF.')
+                     tags$li('By default, the program pulls the sequence context from the forward (+) strand of the reference genome. If the user wishes to generate SNPs for genes that normally are read from the reverse strand, add a string containing "MPRAREV" to the INFO field of the VCF.'),
+                     tags$li('To avoid overloading our Shiny server, the current total number of barcoded sequences (the number of SNPs times the number of barcodes per SNP times 2 for reference/alternate alleles) can be at most 20000. If you would like to generate more sequences than this (up to 1140292) please use the standalone R package mpradesigntools which is available here: https://github.com/andrewGhazi/mpradesigntools')
                    )
                  ),
                  p('VCFs generated by batch querying rsID\'s on dbSNP should meet most of the formatting requirements. However the MPRAREV tag will need to be added by the user (where appropriate) because the VCF\'s do not always specify which strand the relevant gene is on.'),
@@ -129,11 +139,8 @@ shinyUI(fluidPage(
                      width = 955,
                      height = 20),
                  br(),
-                 p(''),
                  p('The outputs of this application are purely to make designing MPRA experiments more convenient for researchers. We make no guarantee as to the accuracy of the outputs and highly encourage you to methodically check your sequences before synthesizing your construct library.'),
                  br(),
-                 h4('Job Time Estimate:'),
-                 htmlOutput('timeText'),
                  h4('Input head:'),
                  tableOutput('inputHead'),
                  h4('Failed snps:'),
@@ -142,9 +149,6 @@ shinyUI(fluidPage(
         id = 'selectedTab'
       )
     )
-    
   )
-
-    
   )
 )
