@@ -8,7 +8,7 @@ library(Biostrings)
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(magrittr)
 
-dir = 'data/CD36_final86_dbSNP.vcf'
+dir = '~/designMPRA/data/CD36_final86_dbSNP.vcf'
 
 skipNum = system(paste0('grep ^## ', dir, ' | wc -l'), intern = TRUE) %>% as.numeric
 
