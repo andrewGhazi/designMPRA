@@ -1,0 +1,139 @@
+---
+title: "Supplementary Information"
+author: "Andrew Ghazi"
+date: "6/21/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE)
+```
+
+## MPRA Activity Noise in Tewhey et al., Cell 2016
+
+Let's visualize the activity standard deviations in each of the transfections in Tewhey et al., Cell 2016. To do this we compute the activity of each barcode in each transfection. Then for every allele in every transfection, we compute the standard deviation of the activities. Then we produce a histogram of the standard deviations in each transfection.
+
+```{r}
+# A comment from reviewer #1:
+# However, the “typical” (I would change this to average) 3-fold standard
+# deviation between barcoded constructs of the same sequence sounds high. There
+# is also a chance I am misreading this sentence (Indeed I had to reread the
+# paragraph several time suggesting a rewrite may be helpful here). But as I
+# read it now this this is in fact substantially higher than the variance we
+# observed and presented in our MPRA paper (Tewhey et al. Cell 2016) and also
+# seems high for Ulirsch et al. which used fewer barcodes. I think presenting
+# the analysis here could be helpful to emphasize to the readers what the
+# authors are describing and to illustrate the problem
+
+# Well let's look at the distribution of activities in the data from Tewhey et al., Cell 2016
+
+library(tidyverse)
+library(magrittr)
+library(parallel)
+library(knitr)
+
+dir = '/mnt/bigData2/andrew/MPRA/Tewhey/indivTags/'
+
+files = list.files(dir, 
+                   pattern = '.expanded$')
+
+getFileDepth = function(file){
+  read_tsv(paste0(dir, file),
+           col_names = c('allele', 'barcode', 'count')) %>% 
+    .$count %>% 
+    sum
+}
+
+fileDepths = data_frame(src = files,
+                        fileDepth = mclapply(src, 
+                                             getFileDepth,
+                                             mc.cores = 19) %>% unlist)
+
+```
+
+```{r, eval = FALSE}
+dnaCounts = map(1:5, ~read_tsv(paste0(dir, files[.x]),
+                               col_names = c('allele', 'barcode', 'count')) %>% 
+                  mutate(src = files[.x])) %>% 
+  reduce(bind_rows) %>% 
+  left_join(fileDepths, by = 'src') %>% 
+  mutate(depthAdjCount = 1e6*count/fileDepth)
+
+depthAdjDNAmeanCount = dnaCounts %>%  
+  group_by(barcode) %>% 
+  summarise(allele = allele[1],
+            bcMean = mean(depthAdjCount)) %>% 
+  ungroup
+#grouping together the huge number of barcodes takes a while, so this is saved and loaded
+
+save(depthAdjDNAmeanCount, file = '~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
+```
+```{r, echo = FALSE}
+load('~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
+```
+
+
+
+So to get the DNA normalization factor we simply take the mean of the DNA counts across the DNA transfections. For example:
+```{r}
+depthAdjDNAmeanCount %>% 
+  head %>% 
+  kable
+```  
+
+So the first barcode for allele `r depthAdjDNAmeanCount$allele[1]` was counted `r depthAdjDNAmeanCount$bcMean[1]` times on average across the plasmid sequencing runs (after adjusting for depth). The depth adjustment is performed as follows:  $$10^6 * \frac{count}{sum\:of\:barcode\:counts\:in\:sequencing\:run}$$  
+
+This normalizes each observed count according to how deeply the replicate was sequenced. 
+
+Tewhey et al., Cell 2016 had five plasmid replicates, so the estimates of these numbers will likely be more precise than the counterparts in Ulirsch et al., Cell 2016 which had only two plasmid replicates. This will in turn make the downstream activity measurements more stable, thus the activity standard deviations in this paper will likely be lower.  
+
+Then we compute the activity levels of each barcode by taking the depth adjust count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
+
+```{r, fig.width=10, cache=TRUE}
+library(parallel)
+computeTransfectionStatistics = function(fileNum){
+  depthNum = fileDepths %>% filter(src == files[fileNum]) %>% .$fileDepth
+  
+  rnaCounts = read_tsv(paste0(dir, files[fileNum]), 
+                       col_names = c('allele', 'barcode', 'count')) %>% 
+    mutate(depthAdjCount = 1e6*count/depthNum)
+    
+    
+  
+  alleleStatistics = depthAdjDNAmeanCount %>% 
+    left_join(rnaCounts, by = c('allele', 'barcode')) %>% 
+    mutate(activity = log(depthAdjCount/bcMean)) %>% 
+    group_by(allele) %>% 
+    summarise(alleleMean = mean(activity, na.rm = TRUE),
+              alleleSD = sd(activity, na.rm = TRUE),
+              numBarcodes = sum(!is.na(count))) %>% 
+    filter(numBarcodes > 1) %>%
+    mutate(file = files[fileNum])
+   # The filter removes alleles that only had one or fewer barcodes show up in
+   # the RNA, for which a standard deviation is not meaningful
+  
+  return(alleleStatistics)
+}
+
+transfectionStatistics = mclapply(6:19,
+                                  computeTransfectionStatistics,
+                                  mc.cores = 14)
+  
+allTransfectionsStats = transfectionStatistics %>% 
+  reduce(bind_rows) %>% 
+  mutate(file = gsub('Geuv_90K_', '', file) %>% gsub('.tag.ct.indiv.expanded', '', .)) 
+
+```
+
+```{r, fig.width=10}
+allTransfectionsStats %>% 
+  ggplot(aes(alleleSD)) +
+  geom_histogram(bins = 100) +
+  facet_wrap('file') +
+  xlab('allele activity standard deviation') +
+  ggtitle('Allele standard deviation distributions by\ntransfection in Tewhey et al., Cell 2016')
+```
+
+
+There is some variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1.

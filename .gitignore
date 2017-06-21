@@ -2,7 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
-Rmd/*
 outputs/*
 data/*
 www/*
+Rmd/Supplement_files/*
+Rmd/Supplement_cache/*
