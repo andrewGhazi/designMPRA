@@ -2,7 +2,9 @@
 title: "Supplementary Information"
 author: "Andrew Ghazi"
 date: "6/21/2017"
-output: html_document
+output: 
+  html_document:
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -14,25 +16,16 @@ knitr::opts_chunk$set(echo = TRUE,
 
 Let's visualize the activity standard deviations in each of the transfections in Tewhey et al., Cell 2016. To do this we compute the activity of each barcode in each transfection. Then for every allele in every transfection, we compute the standard deviation of the activities. Then we produce a histogram of the standard deviations in each transfection.
 
-```{r}
-# A comment from reviewer #1:
-# However, the “typical” (I would change this to average) 3-fold standard
-# deviation between barcoded constructs of the same sequence sounds high. There
-# is also a chance I am misreading this sentence (Indeed I had to reread the
-# paragraph several time suggesting a rewrite may be helpful here). But as I
-# read it now this this is in fact substantially higher than the variance we
-# observed and presented in our MPRA paper (Tewhey et al. Cell 2016) and also
-# seems high for Ulirsch et al. which used fewer barcodes. I think presenting
-# the analysis here could be helpful to emphasize to the readers what the
-# authors are describing and to illustrate the problem
-
-# Well let's look at the distribution of activities in the data from Tewhey et al., Cell 2016
-
+```{r, cache=FALSE}
 library(tidyverse)
 library(magrittr)
 library(parallel)
 library(knitr)
+library(nortest)
+```
 
+
+```{r}
 dir = '/mnt/bigData2/andrew/MPRA/Tewhey/indivTags/'
 
 files = list.files(dir, 
@@ -69,11 +62,9 @@ depthAdjDNAmeanCount = dnaCounts %>%
 
 save(depthAdjDNAmeanCount, file = '~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
 ```
-```{r, echo = FALSE}
+```{r, echo = FALSE, cache = TRUE}
 load('~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
 ```
-
-
 
 So to get the DNA normalization factor we simply take the mean of the DNA counts across the DNA transfections. For example:
 ```{r}
@@ -88,10 +79,11 @@ This normalizes each observed count according to how deeply the replicate was se
 
 Tewhey et al., Cell 2016 had five plasmid replicates, so the estimates of these numbers will likely be more precise than the counterparts in Ulirsch et al., Cell 2016 which had only two plasmid replicates. This will in turn make the downstream activity measurements more stable, thus the activity standard deviations in this paper will likely be lower.  
 
-Then we compute the activity levels of each barcode by taking the depth adjust count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
+Then we compute the activity levels of each barcode by taking the depth adjusted count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
 
-```{r, fig.width=10, cache=TRUE}
+```{r, fig.width=10, eval = FALSE}
 library(parallel)
+library(nortest) # for lillie.test()
 computeTransfectionStatistics = function(fileNum){
   depthNum = fileDepths %>% filter(src == files[fileNum]) %>% .$fileDepth
   
@@ -107,10 +99,11 @@ computeTransfectionStatistics = function(fileNum){
     group_by(allele) %>% 
     summarise(alleleMean = mean(activity, na.rm = TRUE),
               alleleSD = sd(activity, na.rm = TRUE),
-              numBarcodes = sum(!is.na(count))) %>% 
+              numBarcodes = sum(!is.na(count)),
+              lillieforsP = ifelse(numBarcodes > 4, lillie.test(na.omit(activity))$p.value, NA)) %>% 
     filter(numBarcodes > 1) %>%
     mutate(file = files[fileNum])
-   # The filter removes alleles that only had one or fewer barcodes show up in
+   # The filter removes alleles that only had zero or one barcodes show up in
    # the RNA, for which a standard deviation is not meaningful
   
   return(alleleStatistics)
@@ -123,17 +116,43 @@ transfectionStatistics = mclapply(6:19,
 allTransfectionsStats = transfectionStatistics %>% 
   reduce(bind_rows) %>% 
   mutate(file = gsub('Geuv_90K_', '', file) %>% gsub('.tag.ct.indiv.expanded', '', .)) 
-
+#save(allTransfectionsStats, file = '~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
 ```
 
-```{r, fig.width=10}
+```{r, fig.width=10, cache=FALSE, eval = TRUE}
+load('~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
 allTransfectionsStats %>% 
   ggplot(aes(alleleSD)) +
   geom_histogram(bins = 100) +
   facet_wrap('file') +
   xlab('allele activity standard deviation') +
-  ggtitle('Allele standard deviation distributions by\ntransfection in Tewhey et al., Cell 2016')
+  ggtitle('Allele activity standard deviation distributions by\ntransfection in Tewhey et al., Cell 2016')
 ```
 
 
 There is some variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1.
+
+## Activity Normality
+
+In the earlier section describing the activity variance in MPRA assays, we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
+
+Looking at the distribution of these p-values will tell us how commonly the normality assumption of our t-test holds.
+
+```{r}
+allTransfectionsStats %>% 
+  na.omit() %>% #we returned NA for alleles with <4 observations
+  ggplot(aes(lillieforsP)) + 
+  geom_histogram(breaks = seq(0,1,length.out = 30))
+```  
+
+While clearly skewed from the $Unif(0,1)$ distribution we would expect from truly normally distributed samples, the fact that the p-values are far from 0 most of the time suggests that a t-test should be reasonable approximation.
+
+Furthermore, t-tests are generally considered robust against violations of the normality assumption.
+
+## Power calculations
+
+## Barcode design <fill out>
+
+We used the DNABarcodes package to design a set of <a large number around 1M IIRC> 12-mers. Then screened these according to the design parameters in Melnikov's protocol.
+
+
