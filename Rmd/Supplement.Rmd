@@ -12,11 +12,11 @@ knitr::opts_chunk$set(echo = TRUE,
                       cache = TRUE)
 ```
 
-## MPRA Activity Noise in Tewhey et al., Cell 2016
+## MPRA Activity Variance in Tewhey et al., Cell 2016
 
 Let's visualize the activity standard deviations in each of the transfections in Tewhey et al., Cell 2016. To do this we compute the activity of each barcode in each transfection. Then for every allele in every transfection, we compute the standard deviation of the activities. Then we produce a histogram of the standard deviations in each transfection.
 
-```{r, cache=FALSE}
+```{r, cache=FALSE, message=FALSE}
 library(tidyverse)
 library(magrittr)
 library(parallel)
@@ -121,6 +121,9 @@ allTransfectionsStats = transfectionStatistics %>%
 
 ```{r, fig.width=10, cache=FALSE, eval = TRUE}
 load('~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
+```
+
+```{r, fig.width = 10}
 allTransfectionsStats %>% 
   ggplot(aes(alleleSD)) +
   geom_histogram(bins = 100) +
@@ -130,29 +133,56 @@ allTransfectionsStats %>%
 ```
 
 
+
 There is some variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1.
 
-## Activity Normality
+## Activity Normality Assumption  
+
+The "Power" tab of the application uses a t-test to estimate the power to detect functional variants with given activity variance across a range of transcriptional shifts.
 
 In the earlier section describing the activity variance in MPRA assays, we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
 
 Looking at the distribution of these p-values will tell us how commonly the normality assumption of our t-test holds.
 
-```{r}
+```{r, fig.width = 10}
 allTransfectionsStats %>% 
   na.omit() %>% #we returned NA for alleles with <4 observations
   ggplot(aes(lillieforsP)) + 
   geom_histogram(breaks = seq(0,1,length.out = 30))
 ```  
 
-While clearly skewed from the $Unif(0,1)$ distribution we would expect from truly normally distributed samples, the fact that the p-values are far from 0 most of the time suggests that a t-test should be reasonable approximation.
+While a subset of the variants from Tewhey et al. clearly skew from the $Unif(0,1)$ distribution we would expect from truly normally distributed samples, the fact that the p-values are far from 0 most of the time suggests that a t-test should usually be provide a reasonable approximation of the true power.
 
-Furthermore, t-tests are generally considered robust against violations of the normality assumption.
+Furthermore, t-tests are generally considered robust against violations of the normality assumption. <find a citation for this>
+
+All of this together suggests that having a t-test underlie our power calculations would be reasonable. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a prior_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
 
 ## Power calculations
 
+The power calculations are done with `pwr.t.test` from the R `pwr` package using the following R code:
+
+```{r, eval = FALSE}
+tibble::data_frame(meanDiff = seq(0,5, by = .05),
+                   pwr = pwr.t.test(n = input$nbarcode*input$nBlock,
+                                    d = meanDiff / input$sigma,
+                                    sig.level = input$alpha / input$nsnp)$power)
+```
+
+This returns the power to detect a transcriptional shift across a range from zero to five using user inputs on:  
+* the number of barcodes per allele  
+* the number of transfection replicates  
+* the number of variants being tested  
+* the variance of activity measurements  
+
+This data frame is then plotted.
+
 ## Barcode design <fill out>
 
-We used the DNABarcodes package to design a set of <a large number around 1M IIRC> 12-mers. Then screened these according to the design parameters in Melnikov's protocol.
+We generated the set of all possible DNA 12-mers then screened these according to the design parameters in Melnikov's protocol intended to assure that the barcodes are inert. These involve the following parameters:  
+* each nucleotide occurs at least once  
+* there are no runs of single nucleotides greater than length 4  
+* They do not start with `TCT` (this creates a restriction site with XbaI)  
+* they do not match any human miR seed sequences
+
 
 
