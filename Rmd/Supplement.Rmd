@@ -12,7 +12,11 @@ knitr::opts_chunk$set(echo = TRUE,
                       cache = TRUE)
 ```
 
-## MPRA Activity Variance in Tewhey et al., Cell 2016
+Throughout this document you can click the `Code` buttons to see the code blocks that generated the displayed output.
+
+## MPRA Activity Variance 
+
+### Tewhey et al., Cell 2016
 
 Let's visualize the activity standard deviations in each of the transfections in Tewhey et al., Cell 2016. To do this we compute the activity of each barcode in each transfection. Then for every allele in every transfection, we compute the standard deviation of the activities. Then we produce a histogram of the standard deviations in each transfection.
 
@@ -45,11 +49,18 @@ fileDepths = data_frame(src = files,
 
 ```
 
+A few example DNA barcode counts by sample file:
 ```{r, eval = FALSE}
 dnaCounts = map(1:5, ~read_tsv(paste0(dir, files[.x]),
                                col_names = c('allele', 'barcode', 'count')) %>% 
                   mutate(src = files[.x])) %>% 
-  reduce(bind_rows) %>% 
+  reduce(bind_rows)
+
+dnaCounts %>% # show a random sample of the counts
+  sample_n(5) %>% 
+  kable
+  
+dnaCounts %<>%
   left_join(fileDepths, by = 'src') %>% 
   mutate(depthAdjCount = 1e6*count/fileDepth)
 
@@ -60,8 +71,20 @@ depthAdjDNAmeanCount = dnaCounts %>%
   ungroup
 #grouping together the huge number of barcodes takes a while, so this is saved and loaded
 
+save(dnaCounts, file = '~/designMPRA/outputs/tewheyDNAcounts.RData')
 save(depthAdjDNAmeanCount, file = '~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
 ```
+```{r, echo = FALSE, cache = TRUE, cache.lazy=FALSE}
+# echo = FALSE statements like this are just to make the RMarkdown rendering
+# faster; the objects they load are the output of their respective echo = TRUE,
+# eval = FALSE statements preceding them
+
+load('~/designMPRA/outputs/tewheyDNAcounts.RData')
+dnaCounts %>% # show a random sample of the counts 
+  sample_n(5) %>% 
+  kable
+```
+
 ```{r, echo = FALSE, cache = TRUE}
 load('~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
 ```
@@ -79,6 +102,19 @@ This normalizes each observed count according to how deeply the replicate was se
 
 Tewhey et al., Cell 2016 had five plasmid replicates, so the estimates of these numbers will likely be more precise than the counterparts in Ulirsch et al., Cell 2016 which had only two plasmid replicates. This will in turn make the downstream activity measurements more stable, thus the activity standard deviations in this paper will likely be lower.  
 
+We need to cut out barcodes that were not well represented in the DNA samples. A (log-scale) density plot of the mean depth-normalized count shows that .06 would be a good cutoff. This cuts out 4221460 out of 19611641 barcodes. The first few modes represents failed barcodes with very low counts while the large mode represents well-performing barcodes (see Ulirsch et al., Cell 2016 Figure 1B):
+
+```{r}
+depthAdjDNAmeanCount %>% 
+  ggplot(aes(bcMean)) + 
+  geom_density(adjust = 2) + 
+  scale_x_log10() + 
+  geom_vline(xintercept = .06,
+             lty = 2,
+             color = 'grey60') + 
+  xlab('Depth Adjusted Mean Barcode Count in DNA samples')
+```
+
 Then we compute the activity levels of each barcode by taking the depth adjusted count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
 
 ```{r, fig.width=10, eval = FALSE}
@@ -94,6 +130,7 @@ computeTransfectionStatistics = function(fileNum){
     
   
   alleleStatistics = depthAdjDNAmeanCount %>% 
+    filter(bcMean > .06) %>% # this is where we introduce the cutoff from the previous section
     left_join(rnaCounts, by = c('allele', 'barcode')) %>% 
     mutate(activity = log(depthAdjCount/bcMean)) %>% 
     group_by(allele) %>% 
@@ -116,10 +153,10 @@ transfectionStatistics = mclapply(6:19,
 allTransfectionsStats = transfectionStatistics %>% 
   reduce(bind_rows) %>% 
   mutate(file = gsub('Geuv_90K_', '', file) %>% gsub('.tag.ct.indiv.expanded', '', .)) 
-#save(allTransfectionsStats, file = '~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
+save(allTransfectionsStats, file = '~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
 ```
 
-```{r, fig.width=10, cache=FALSE, eval = TRUE}
+```{r, fig.width=10, cache=FALSE, eval = TRUE, echo = FALSE}
 load('~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
 ```
 
@@ -132,9 +169,78 @@ allTransfectionsStats %>%
   ggtitle('Allele activity standard deviation distributions by\ntransfection in Tewhey et al., Cell 2016')
 ```
 
+There is some variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1 (the mean of every allele in every file is .926). Because activity is a log quantity, this correpsonds to $exp(1) \approx 2.7$ or more mRNA molecules out per DNA molecule in. 
+
+We can look at the activity distribution of the two alleles for a single SNP tested. We'll take `rs1674999` as an example because it has an activity standard deviation of almost exactly 1. A random sample of the raw counts:
+
+```{r}
+# counts = map(1:19, ~read_tsv(paste0(dir, files[.x]),
+#                                col_names = c('allele', 'barcode', 'count')) %>% 
+#                   mutate(src = files[.x])) %>% 
+#   reduce(bind_rows)
+# 
+# rs1674999counts = counts %>% filter(grepl('rs1674999', allele))
+
+load('~/designMPRA/outputs/tewheyrs1674999counts.RData')
+
+rs1674999counts %>% 
+  sample_n(5) %>%  
+  kable
+```
+
+And a plot of the activity levels of all barcodes in all samples:
+```{r}
+assureRNAandDNA = function(barcodeDat){any(grepl('ctrl', barcodeDat$src))&any(grepl('HepG2|NA[0-9]{5}', barcodeDat$src))}
+
+rs1674999counts %>% 
+  group_by(barcode) %>% 
+  nest %>% 
+  filter(map_lgl(data, assureRNAandDNA)) %>% #only include barcodes with DNA & RNA measurements
+  unnest %>% 
+  left_join(fileDepths, by = 'src') %>% 
+  mutate(depthAdjCount = count*1e6/fileDepth) %>% #adjust count for sample depth
+  group_by(barcode) %>% nest %>%
+  mutate(ctrlMean = map_dbl(data, ~filter(.x, grepl('ctrl', .x$src))$depthAdjCount %>% mean)) %>% # take mean count of control samples
+  unnest %>% 
+  filter(!grepl('ctrl', src)) %>% 
+  mutate(activity = log(depthAdjCount / ctrlMean)) %>% #compute activity of RNA samples
+  mutate(replicate = gsub('Geuv_90K_', '', src) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
+  ggplot(aes(allele, activity)) + 
+  geom_jitter(height = 0, width = .3)
+```
+
+This SNP doesn't seem to have a large transcriptional shift between the alleles, but one can see that this level of activity variance (which is fairly common within the experiment) is large. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of .287) at 90% power at the significance level required to overcome multiple corrections would require an even larger number of barcodes than shown here:
+
+```{r}
+library(pwr)
+
+pwr.t.test(d = .287, 
+           sig.level = .05/39479, # bonferroni correction for the number of oligo pairs tested in the paper
+           power = .9)
+```
 
 
-There is some variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1.
+
+### Ulirsch et al., Cell 2016
+
+Repeating the analysis with a different study.
+
+A few example barcode counts:
+```{r}
+dir = "/mnt/labhome/andrew/MPRA/paper_data/"
+
+UMPRA = read_delim(file = paste0(dir, "Raw/", "RBC_MPRA_minP_raw.txt"),
+                         delim = "\t",
+                         col_names = T,
+                         col_types = cols(chr = "c"))
+
+UMPRA %>% # show a few example counts
+  select(chr, pos, ref, alt, byallele, K562_minP_DNA1:K562_GATA1_minP_RNA4) %>%
+  gather(key = src, value = count, K562_minP_DNA1:K562_GATA1_minP_RNA4) %>% 
+  sample_n(5) %>% 
+  kable
+```
+
 
 ## Activity Normality Assumption  
 
