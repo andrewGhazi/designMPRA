@@ -39,7 +39,18 @@ cat(paste0('done removing 12mers starting with TCT at ', Sys.time()))
 
 #Cut out those that match the miRNA seed sequences 
 #For now let's just use the human ones since there are fewer and it won't take as long
-source('~/plateletMPRA/mirBaseMunging.R')
+species = read.table('~/plateletMPRA/mirBaseSpecies.txt') %>% #isolated species names with cat mature.fa | grep '>' | cut -f 3,4 -d \  > mirBaseSpecies.txt
+  as.tbl %>% 
+  transmute(name = paste(V1 %>% as.character, V2 %>% as.character)) #%>% 
+#filter(!duplicated(name))
+human = grepl('Homo sapiens', species$name)
+
+allSeeds = readRNAStringSet('~/plateletMPRA/mature.fa')
+
+seedSeqs = allSeeds %>% subseq(2,7) %>% DNAStringSet #%>% unique
+humanSeedSeqs = seedSeqs[human] %>% unique
+seedSeqs = allSeeds %>% subseq(2,7) %>% DNAStringSet %>% unique
+
 haveSeedlist = vwhichPDict(humanSeedSeqs, twelvemers) #this takes ~40 minutes. All seeds takes ~1h45m
 save(list = c('twelvemers', 'haveSeedlist', 'humanSeedSeqs'), file = '~/designMPRA/outputs/haveHumanRNAiSeeds.RData')
 haveSeed = sapply(haveSeedlist, function(x){length(x) > 0})
