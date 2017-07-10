@@ -114,7 +114,7 @@ shinyUI(fluidPage(
                              a(href = "https://www.jove.com/video/51719/massively-parallel-reporter-assays-in-cultured-mammalian-cells", 'Melnikov (2014)'),
                              '(which is intended to be used with the',
                              a(href = "https://www.addgene.org/49349/", 'pMPRA1 vector series'),
-                             '). Different enzymes can be used through use of', a('the companion R package', href = 'https://andrewghazi.shinyapps.io/designmpra/'), '.'),
+                             '). Different enzymes can be used through use of', a('the companion R package', href = 'https://github.com/andrewGhazi/mpradesigntools'), '.'),
                      tags$li('Barcodes are constrained to being 12bp in length'),
                      tags$li('Insertions and deletions must encode the reference and mutant alleles (respectively) as a dash character \'-\'.'),
                      tags$li('Multiple alternate alleles should be separated in the ALT field by a comma and no spaces'),
