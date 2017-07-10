@@ -101,7 +101,7 @@ shinyUI(fluidPage(
                  h4('Parameters'),
                  tags$div(
                    tags$ul(
-                     tags$li('Genomic context width - the amount of genomic context on either side of input SNPs.'),
+                     tags$li('Genomic context width - the amount of genomic context on either side of input SNPs. This can be varied on either side by using the R package.'),
                      tags$li('Number of barcodes per SNP'),
                      tags$li('PCR primers')
                  )),
@@ -114,7 +114,7 @@ shinyUI(fluidPage(
                              a(href = "https://www.jove.com/video/51719/massively-parallel-reporter-assays-in-cultured-mammalian-cells", 'Melnikov (2014)'),
                              '(which is intended to be used with the',
                              a(href = "https://www.addgene.org/49349/", 'pMPRA1 vector series'),
-                             ').'),
+                             '). Different enzymes can be used through use of', a('the companion R package', href = 'https://andrewghazi.shinyapps.io/designmpra/'), '.'),
                      tags$li('Barcodes are constrained to being 12bp in length'),
                      tags$li('Insertions and deletions must encode the reference and mutant alleles (respectively) as a dash character \'-\'.'),
                      tags$li('Multiple alternate alleles should be separated in the ALT field by a comma and no spaces'),
@@ -141,12 +141,14 @@ shinyUI(fluidPage(
                      width = 955,
                      height = 20),
                  br(),
-                 p('The outputs of this application are purely to make designing MPRA experiments more convenient for researchers. We make no guarantee as to the accuracy of the outputs and highly encourage you to methodically check your sequences before synthesizing your construct library.'),
-                 br(),
                  h4('Input head:'),
                  tableOutput('inputHead'),
                  h4('Failed snps:'),
                  tableOutput('failed'),
+                 h3('Disclaimer'),
+                 p('The outputs of this application are purely to make designing MPRA experiments more convenient for researchers. We make no guarantee as to the accuracy of the outputs and highly encourage you to methodically check your sequences before synthesizing your construct library.'),
+                 br(),
+                 p('Furthermore, we emphasize that this web tool mainly serves for interactive, demonstrative purposes. We encourage users interested in designing large scale MPRAs to use ', a('the companion R package', href = 'https://github.com/andrewGhazi/mpradesigntools'), 'which is not limited in size and (slightly) more featureful.'),
                  value = 3),
         id = 'selectedTab'
       )
