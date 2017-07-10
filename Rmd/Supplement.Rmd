@@ -39,12 +39,15 @@ files = list.files(dir,
                    pattern = '.expanded$')
 
 getFileDepth = function(file){
+  # function to get the total number of reads in a sample. Used to normalize counts by sample depth.
+  
   read_tsv(paste0(dir, file),
            col_names = c('allele', 'barcode', 'count')) %>% 
     .$count %>% 
     sum
 }
 
+#apply the above function to the sample files
 fileDepths = data_frame(src = files,
                         fileDepth = mclapply(src, 
                                              getFileDepth,
@@ -220,7 +223,7 @@ rs1674999counts %>%
   geom_jitter(height = 0, width = .3)
 ```
 
-This SNP doesn't seem to have a large transcriptional shift between the alleles (both alleles have roughly the same average activity), but one can see that this level of activity variance (which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Keep in mind that the above plot aggregates the data from all 14 transfections. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
+This SNP doesn't seem to have a large transcriptional shift between the alleles (both alleles have roughly the same average activity), but one can see that this level of activity variance (around 1.0, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Keep in mind that the above plot aggregates the data from all 14 transfections. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
 
 ```{r}
 library(pwr)
@@ -448,6 +451,10 @@ cat(paste0('done removing those with mirSeeds at ', Sys.time()))
 print(length(twelvemers))
 save(twelvemers, file = '~/designMPRA/outputs/inertTwelveMers.RData')
 ```
+
+## S5 - Tool workflow
+
+
 
 
 
