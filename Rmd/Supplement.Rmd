@@ -1,11 +1,11 @@
 ---
-title: "Supplementary Information"
-author: "Andrew Ghazi"
-date: "6/21/2017"
+title: \Large{Supplementary Information}
+author: \large{Andrew Ghazi}
+date: \normalsize{6/21/2017}
 output: 
-  html_document:
-    code_folding: hide
+  pdf_document:
     toc: true
+    fig_caption: false
 ---
 
 ```{r setup, include=FALSE}
@@ -13,15 +13,29 @@ knitr::opts_chunk$set(echo = TRUE,
                       cache = TRUE)
 ```
 
-Throughout this document you can click the `Code` buttons to see the code blocks that generated the displayed output.
+## S1 - MPRA diagrams
 
-## S1 - MPRA Activity Variance 
+### S1.1 MPRA experimental diagram 
 
-Let's visualize the variance of MPRA activity measurements. We do this by computing the activity of each barcode for an allele, then taking the standard deviation of those activities. Repeating this for all alleles, we can see what the distribution of standard deviations are across alleles.
+![MPRA experimental diagram](/mnt/labhome/andrew/designMPRA/www/MPRAdiagram.png)
 
-### S1.1 - MPRA Activity Variance in Tewhey et al., Cell 2016
+### S1.2 MPRA Design Tools Workflow
 
-Let's begin with Tewhey et al., Cell 2016. The study's data was acquired through direct correspondence with the authors. We compute the activity of each barcode in each transfection. Then, for every allele in every transfection, we compute the standard deviation of the activities. We then produce a histogram of the standard deviations in each transfection.
+![MPRA Design Tools workflow](/mnt/labhome/andrew/designMPRA/www/workflowDiagram.png)  
+
+### S1.3 MPRA Design Tools Sequence Element Layout
+
+![MPRA Design Tools Sequence Element Layout](/mnt/labhome/andrew/designMPRA/www/MPRAseqDiagram.png)
+
+When using enzymes other than KpnI and XbaI through use of the R package, the corresponding segments of the sequence are replaced by the arguments `enzyme1` and `enzyme2` respectively.
+
+## S2 - MPRA Activity Variance 
+
+Below is an analysis and visualization the variance of MPRA activity measurements. We do this by computing the activity of each barcode for an allele, then taking the standard deviation of those activities. Repeating this for all alleles, we can see what the distribution of standard deviations are across alleles.
+
+### S2.1 - MPRA Activity Variance in Tewhey et al., Cell 2016
+
+The study's data was acquired through direct correspondence with the authors. We compute the activity of each barcode in each transfection. Then, for every allele in every transfection, we compute the standard deviation of the activities. We then produce a histogram of the standard deviations in each transfection.
 
 ```{r, cache=FALSE, message=FALSE}
 library(tidyverse)
@@ -39,7 +53,8 @@ files = list.files(dir,
                    pattern = '.expanded$')
 
 getFileDepth = function(file){
-  # function to get the total number of reads in a sample. Used to normalize counts by sample depth.
+  # function to get the total number of reads in a sample. 
+  # Used to normalize counts by sample depth.
   
   read_tsv(paste0(dir, file),
            col_names = c('allele', 'barcode', 'count')) %>% 
@@ -75,10 +90,13 @@ depthAdjDNAmeanCount = dnaCounts %>%
   summarise(allele = allele[1],
             bcMean = mean(depthAdjCount)) %>% 
   ungroup
-#grouping together the huge number of barcodes takes a while, so this is saved and loaded
+#grouping together the huge number of barcodes takes a while, 
+#so this is saved and loaded
 
-save(dnaCounts, file = '~/designMPRA/outputs/tewheyDNAcounts.RData')
-save(depthAdjDNAmeanCount, file = '~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
+save(dnaCounts, 
+     file = '~/designMPRA/outputs/tewheyDNAcounts.RData')
+save(depthAdjDNAmeanCount, 
+     file = '~/designMPRA/outputs/tewheyDepthAdjDNAcounts.RData')
 ```
 ```{r, echo = FALSE, cache = TRUE, cache.lazy=FALSE}
 # echo = FALSE statements like this are just to make the RMarkdown rendering
@@ -141,15 +159,17 @@ computeTransfectionStatistics = function(fileNum){
   
   # Then compute statistics for the file
   alleleStatistics = depthAdjDNAmeanCount %>% 
-    filter(bcMean > .06) %>% # this is where we introduce the cutoff from the previous section
+    filter(bcMean > .06) %>% # this is where we introduce the cutoff 
     left_join(rnaCounts, by = c('allele', 'barcode')) %>% #join onto DNA counts
     mutate(activity = log(depthAdjCount/bcMean)) %>% #compute activity
     group_by(allele) %>% #for each allele
-    summarise(alleleMean = mean(activity, na.rm = TRUE), #compute several statistics
+    summarise(alleleMean = mean(activity, na.rm = TRUE), #compute statistics
               alleleSD = sd(activity, na.rm = TRUE),
               numBarcodes = sum(!is.na(count)),
-              lillieforsP = ifelse(numBarcodes > 4, lillie.test(na.omit(activity))$p.value, NA)) %>% 
-    filter(numBarcodes > 1) %>% # take only alleles which had > 1 barcode representatives
+              lillieforsP = ifelse(numBarcodes > 4, 
+                                   lillie.test(na.omit(activity))$p.value, 
+                                   NA)) %>% 
+    filter(numBarcodes > 1) %>% # take only alleles which had > 1 barcode 
     mutate(file = files[fileNum]) # and add on a file identifier
    # The filter removes alleles that only had zero or one barcodes show up in
    # the RNA, for which a standard deviation is not meaningful
@@ -166,7 +186,8 @@ transfectionStatistics = mclapply(6:19,
 allTransfectionsStats = transfectionStatistics %>% 
   reduce(bind_rows) %>% 
   mutate(file = gsub('Geuv_90K_', '', file) %>% gsub('.tag.ct.indiv.expanded', '', .)) 
-save(allTransfectionsStats, file = '~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
+save(allTransfectionsStats, 
+     file = '~/designMPRA/outputs/tewheyAllTransfectionsStats.RData')
 ```
 
 ```{r, fig.width=10, cache=FALSE, eval = TRUE, echo = FALSE}
@@ -204,36 +225,45 @@ rs1674999counts %>%
 
 And a plot of the activity levels of all barcodes in all samples:
 ```{r}
-assureRNAandDNA = function(barcodeDat){any(grepl('ctrl', barcodeDat$src))&any(grepl('HepG2|NA[0-9]{5}', barcodeDat$src))}
+assureRNAandDNA = function(barcodeDat){
+  # function for only including barcodes with DNA & RNA measurements
+  any(grepl('ctrl', 
+            barcodeDat$src)) & any(grepl('HepG2|NA[0-9]{5}', 
+                                                 barcodeDat$src))
+}
+
 
 rs1674999counts %>% 
   group_by(barcode) %>% 
   nest %>% 
-  filter(map_lgl(data, assureRNAandDNA)) %>% #only include barcodes with DNA & RNA measurements
+  filter(map_lgl(data, assureRNAandDNA)) %>% 
   unnest %>% 
   left_join(fileDepths, by = 'src') %>% 
   mutate(depthAdjCount = count*1e6/fileDepth) %>% #adjust count for sample depth
   group_by(barcode) %>% nest %>%
-  mutate(ctrlMean = map_dbl(data, ~filter(.x, grepl('ctrl', .x$src))$depthAdjCount %>% mean)) %>% # take mean count of control samples
+  mutate(ctrlMean = map_dbl(data, # take mean count of control samples
+                            ~filter(.x, grepl('ctrl', .x$src))$depthAdjCount %>% mean)) %>% 
   unnest %>% 
   filter(!grepl('ctrl', src)) %>% 
-  mutate(activity = log(depthAdjCount / ctrlMean)) %>% #compute activity of RNA samples
-  mutate(replicate = gsub('Geuv_90K_', '', src) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
+  mutate(activity = log(depthAdjCount / ctrlMean)) %>% #compute activity 
+  mutate(replicate = gsub('Geuv_90K_', '', src) %>% gsub('.tag.ct.indiv.expanded', '', .), 
+         allele = gsub('rs1674999_', '', allele)) %>% 
   ggplot(aes(allele, activity)) + 
-  geom_jitter(height = 0, width = .3)
+  geom_jitter(height = 0, width = .25, size = .8) + 
+  facet_wrap('replicate')
 ```
 
-This SNP doesn't seem to have a large transcriptional shift between the alleles (both alleles have roughly the same average activity), but one can see that this level of activity variance (around 1.0, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Keep in mind that the above plot aggregates the data from all 14 transfections. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
+This SNP doesn't seem to have a large transcriptional shift between the alleles (both alleles have roughly the same average activity), but one can see that this level of activity variance (close to 1.0 in most transfections, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require aggregating an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
 
 ```{r}
 library(pwr)
 
 pwr.t.test(d = .285, 
-           sig.level = .05/39479, # bonferroni correction for the number of oligo pairs tested in the paper
+           sig.level = .05/39479, # bonferroni correction for the number of pairs tested in the paper
            power = .9)
 ```
 
-### S1.2 - MPRA Activity Variance in Ulirsch et al., Cell 2016  
+### S2.2 - MPRA Activity Variance in Ulirsch et al., Cell 2016  
 
 Repeating the analysis with a different study. This data was acquired from the [authors' website](http://www.bloodgenes.org/RBC_MPRA/). The code differs slightly due to differences in how the data was provided by the authors, but the analysis is the same.
 
@@ -250,7 +280,8 @@ UMPRA %>% # show a few example counts
   select(chr, pos, ref, alt, byallele, K562_minP_DNA1:K562_GATA1_minP_RNA4) %>%
   gather(key = src, value = count, K562_minP_DNA1:K562_GATA1_minP_RNA4) %>% 
   sample_n(5) %>% 
-  set_names(c('Chrom', 'Position', 'Reference Allele', 'Alternate Allele', 'Allele ID', 'Transfection', 'Count')) %>% 
+  set_names(c('Chrom', 'Position', 'Reference', 
+              'Alternate', 'Allele ID', 'Transfection', 'Count')) %>% 
   kable
 ```
 
@@ -299,16 +330,21 @@ If we combine both studies, we can see the typical range of activity standard de
 bothStudies = c(allTransfectionsStats$alleleSD, #Tewhey et al.
                 activitySDs$alleleSD) #Ulirsch et al.
 
-#Mean activity standard deviation in both studies:
+# Mean activity standard deviation in both studies:
 bothStudies %>% 
   mean(na.rm = TRUE)
 
-#Central 95% interval of activity standard deviations in both studies:
+# Exponentiated
+bothStudies %>% 
+  mean(na.rm = TRUE) %>% 
+  exp
+
+# Central 95% interval of activity standard deviations in both studies:
 bothStudies %>% 
   na.omit %>% 
   quantile(c(.025, .975))
 
-#Central 95% interval of activity standard fold-change in both studies:
+# Exponentiated
 bothStudies %>% 
   na.omit %>% 
   quantile(c(.025, .975)) %>% 
@@ -316,29 +352,46 @@ bothStudies %>%
 ```
 
 
-## S2 - Activity Normality Assumption  
+## S3 - Activity Normality Assumption  
 
 The "Power" tab of the application uses a t-test to estimate the power to detect functional variants with given activity variance across a range of transcriptional shifts.
 
-In the earlier section S1.1 describing the activity variance in MPRA assays, we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
+In the earlier section S2.1 describing the activity variance in MPRA assays, we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
 
-Looking at the distribution of these p-values will tell us how commonly the normality assumption of our t-test holds. If all samples come from normal distributions, the p-values should follow a $Unif(0,1)$ distribution.
+Looking at the distribution of these p-values will tell us how commonly the normality assumption of our t-test holds. If all samples come from normal distributions, the p-values should follow a $Unif(0,1)$ distribution (shown here scaled to this number of allele observations as a grey horizontal line).
 
 ```{r, fig.width = 10}
+segment = data_frame(x1 = 0,
+                     x2 = 1,
+                     y1 = nrow(allTransfectionsStats) / 30,
+                     y2 = nrow(allTransfectionsStats) / 30)
+
 allTransfectionsStats %>% 
   na.omit() %>% #we returned NA for alleles with <4 observations
   ggplot(aes(lillieforsP)) + 
-  geom_histogram(breaks = seq(0,1,length.out = 30))
+  geom_histogram(breaks = seq(0,1,length.out = 30)) +
+  xlab('Lilliefors Test P-value') +
+  geom_segment(aes(x = x1,
+                   xend = x2,
+                   y = y1,
+                   yend = y2),
+               data = segment,
+               lty = 2,
+               color = 'grey60')
 ```  
 
 While a subset of the variants from Tewhey et al. clearly skew from the $Unif(0,1)$ distribution one would expect from normally distributed samples, the fraction of alleles that defy the expected pattern is relatively small. This suggests that a t-test should usually provide a reasonable approximation of the true power.
 
-The highly non-normal alleles tend simply to come from alleles with the highest numbers of barcodes / barcode counts. There is no indication that SNPs with large transcriptional shifts (i.e. those we aim to detect with the assay) systematically defy the normality assumption. The following plot shows this with the observed transcriptional shift on the x-axis and p-value of a Lilliefors test on the activity measurements of the second allele on the y-axis (the plot for the first allele looks very similar). If the most important SNPs systematically defied the normality assumptions, the SNPs on the left and right sides would show the lowest p-values, which is not observed:
+There is no indication that SNPs with large transcriptional shifts (i.e. those one aims to detect with the assay) systematically defy the normality assumption. The following plot shows this with the observed transcriptional shift on the x-axis and p-value of a Lilliefors test on the activity measurements of the second allele on the y-axis (the plot for the first allele looks very similar). If the most important SNPs systematically defied the normality assumptions, the SNPs on the left and right sides would show the lowest p-values, which is not observed:
 
 ```{r, message = FALSE, warning = FALSE}
 shiftNonNormality = allTransfectionsStats %>% 
-  separate(allele, into = c('SNP', 'allele'), sep = '_(?=[AB]$)|_(?=alt[AB]$)') %>% 
-  separate(allele, into = c('alt', 'allele'), sep = '(?=[AB]$)') %>% 
+  separate(allele, 
+           into = c('SNP', 'allele'), 
+           sep = '_(?=[AB]$)|_(?=alt[AB]$)') %>% 
+  separate(allele, 
+           into = c('alt', 'allele'), 
+           sep = '(?=[AB]$)') %>% 
   unite(SNP, SNP:alt) %>% 
   mutate(SNP = gsub('_$', '', SNP)) %>% 
   unite(SNPfile, SNP, file) %>% 
@@ -357,11 +410,11 @@ shiftNonNormality %>%
   ylab('allele 2 Lilliefors P-value')
 ```
 
-Furthermore, t-tests are generally considered robust against minor violations of the normality assumption. 
+Furthermore, t-tests are generally considered robust against minor violations of the normality assumption (Devore 2008). 
 
 All of this together suggests that having a t-test underlie our power calculations would be reasonable. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
 
-## S3 - Power calculations
+## S4 - Power calculations
 
 The power calculations are done with `pwr.t.test` from the R `pwr` package using the following R code:
 
@@ -381,7 +434,7 @@ This returns the power to detect a transcriptional shift across a range from zer
 
 This data frame is then plotted.
 
-## S4 - Barcode design 
+## S5 - Barcode design 
 
 We generated the set of all possible DNA 12-mers then screened these according to the design parameters in Melnikov et al., Nature Biotechnology 2012 intended to assure that the barcodes are inert. These involve the following parameters:  
 * each nucleotide occurs at least once  
@@ -429,7 +482,8 @@ cat(paste0('done removing 12mers starting with TCT at ', Sys.time()))
 
 #Cut out those that match the miRNA seed sequences 
 #For now let's just use the human ones since there are fewer and it won't take as long
-species = read.table('~/plateletMPRA/mirBaseSpecies.txt') %>% #isolated species names with cat mature.fa | grep '>' | cut -f 3,4 -d \  > mirBaseSpecies.txt
+#isolated species names with cat mature.fa | grep '>' | cut -f 3,4 -d \  > mirBaseSpecies.txt
+species = read.table('~/plateletMPRA/mirBaseSpecies.txt') %>% 
   as.tbl %>% 
   transmute(name = paste(V1 %>% as.character, V2 %>% as.character)) #%>% 
   #filter(!duplicated(name))
@@ -442,7 +496,8 @@ humanSeedSeqs = seedSeqs[human] %>% unique
 seedSeqs = allSeeds %>% subseq(2,7) %>% DNAStringSet %>% unique
 
 haveSeedlist = vwhichPDict(humanSeedSeqs, twelvemers) #this takes ~40 minutes. All seeds takes ~1h45m
-save(list = c('twelvemers', 'haveSeedlist', 'humanSeedSeqs'), file = '~/designMPRA/outputs/haveHumanRNAiSeeds.RData')
+save(list = c('twelvemers', 'haveSeedlist', 'humanSeedSeqs'), 
+     file = '~/designMPRA/outputs/haveHumanRNAiSeeds.RData')
 haveSeed = sapply(haveSeedlist, function(x){length(x) > 0})
 
 twelvemers = twelvemers[!haveSeed]
@@ -452,9 +507,12 @@ print(length(twelvemers))
 save(twelvemers, file = '~/designMPRA/outputs/inertTwelveMers.RData')
 ```
 
-## S5 - Tool workflow
+## S6 - References
 
-
+1. Melnikov, A., Murugan, A., Zhang, X., Tesileanu, T., Wang, L., Rogov, P., … Mik-kelsen, T. S. (2012). Systematic dissection and optimization of inducible enhancers in human cells using a massively parallel reporter assay. Nature Bio-technology, 30(3), 271–7.  
+2. Tewhey, R., Kotliar, D., Park, D. S., Liu, B., Winnicki, S., Reilly, S. K., … Sabeti, P. C. (2016). Direct Identification of Hundreds of Expression-Modulating Variants using a Multiplexed Reporter Assay. Cell, 165(6), 1519–1529.  
+3. Ulirsch, J. C., Nandakumar, S. K., Wang, L., Giani, F. C., Zhang, X., Rogov, P., … Sankaran, V. G. (2016). Systematic Functional Dissection of Common Genetic Variation Affecting Red Blood Cell Traits. Cell, 165(6), 1530–1545.  
+4. Devore, J. L. (2008). The Two-Sample t Test and Confidence Interval. In Probability and Statistics For Engineering and the Sciences (7th ed., p. 336). Belmont, CA: Thomson Brooks/Cole.
 
 
 
