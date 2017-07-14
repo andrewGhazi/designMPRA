@@ -128,7 +128,7 @@ This normalizes each observed count according to how deeply the replicate was se
 
 Tewhey et al., Cell 2016 had five plasmid replicates, so the estimates of the mean DNA counts from this study will likely be more precise than the counterparts in Ulirsch et al., Cell 2016 which had only two plasmid replicates. This will in turn make the downstream activity measurements more stable, thus the activity standard deviations in this paper will likely be lower.  
 
-We cut out barcodes that were not well represented in the DNA samples. A (log-scale) density plot of the mean depth-normalized count shows that .06 (shown as a dotted vertical line) would be a good cutoff. This cuts out 4221460 out of 19611641 barcodes. The first few modes represents failed barcodes with very low counts while the large mode represents well-performing barcodes (for further example see Ulirsch et al., Cell 2016 Figure 1B):
+We cut out barcodes that were not well represented in the DNA samples. Visual inspection of a (log-scale) density plot of the mean depth-normalized count shows that .06 would be a reasonable cutoff (shown as a dotted vertical line). This cuts out 4221460 out of 19611641 barcodes. The first few modes represents failed barcodes with very low counts while the large mode represents well-performing barcodes (for further example see Ulirsch et al., Cell 2016 Figure 1B):
 
 ```{r}
 depthAdjDNAmeanCount %>% 
@@ -138,7 +138,8 @@ depthAdjDNAmeanCount %>%
   geom_vline(xintercept = .06,
              lty = 2,
              color = 'grey60') + 
-  xlab('Depth Adjusted Mean Barcode Count in DNA samples')
+  xlab('Depth Adjusted Mean Barcode Count in DNA samples') + 
+  ggtitle('Density plot of depth-adjusted DNA count mean\nacross DNA replicates in Tewhey et al., 2016')
 ```
 
 Then we compute the activity levels of each barcode by taking the depth adjusted count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
@@ -200,7 +201,7 @@ allTransfectionsStats %>%
   geom_histogram(bins = 100) +
   facet_wrap('file') +
   xlab('allele activity standard deviation') +
-  ggtitle('Allele activity standard deviation distributions by\ntransfection in Tewhey et al., Cell 2016')
+  ggtitle('Allele activity standard deviation distributions by\ntransfection in Tewhey et al., 2016')
 ```
 
 There is variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1 (the mean of every allele in every transfection in this study is .926). Because activity is a log quantity, a standard deviation of 1 correpsonds to an average variability of $exp(1) \approx 2.7$-fold more mRNA molecules out per DNA molecule in within barcode replicates of the same allele. 
@@ -250,7 +251,9 @@ rs1674999counts %>%
          allele = gsub('rs1674999_', '', allele)) %>% 
   ggplot(aes(allele, activity)) + 
   geom_jitter(height = 0, width = .25, size = .8) + 
-  facet_wrap('replicate')
+  facet_wrap('replicate') + 
+  xlab('barcode activity observations') +
+  ggtitle('Activity measurements of rs1674999\nin Tewhey et al., 2016 by sample')
 ```
 
 This SNP doesn't seem to have a large transcriptional shift between the alleles (both alleles have roughly the same average activity), but one can see that this level of activity variance (close to 1.0 in most transfections, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require aggregating an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
@@ -299,7 +302,8 @@ UMPRA %>%
   scale_x_log10() +
   geom_vline(xintercept = .13,
              lty = 2,
-             color = 'grey60')
+             color = 'grey60') +
+  ggtitle('Density plot of depth-adjusted DNA count mean\nacross DNA replicates in Ulirsch et al., 2016')
 ```
 
 And here are the distributions of allele activity standard deviations by sample:
@@ -312,14 +316,16 @@ activitySDs = UMPRA %>%
   gather(sample, depthAdjCount, K562_CTRL_minP_RNA1:K562_GATA1_minP_RNA4) %>% 
   mutate(activity = log(depthAdjCount / dnaMean)) %>% 
   group_by(byallele, sample) %>% 
-  summarise(alleleSD = sd(activity[is.finite(activity)], na.rm = TRUE)) %>% 
+  summarise(alleleSD = sd(activity[is.finite(activity)], na.rm = TRUE)) %>%
   ungroup
+# the use of is.finite() removes barcodes with 0 RNA counts (-Inf activity)
 
 activitySDs %>% 
   ggplot(aes(alleleSD)) + 
   geom_histogram(bins = 50) +
   facet_wrap('sample') +
-  xlab('Allele Activity Standard Deviation')
+  xlab('Allele Activity Standard Deviation') +
+  ggtitle('Allele activity standard deviation distributions\nby transfection in Ulirsch et al., 2016')
 ```
 
 Again, this plot shows that for a randomly chosen single allele, the standard deviation of its activity measurements are commonly around or above 1. The mean activity standard deviation across all samples in this study was `r mean(activitySDs$alleleSD)`.
@@ -377,7 +383,8 @@ allTransfectionsStats %>%
                    yend = y2),
                data = segment,
                lty = 2,
-               color = 'grey60')
+               color = 'grey60') +
+  ggtitle('Lilliefors Normality Test P-values of allele\nactivity measurements in Tewhey et al., 2016')
 ```  
 
 While a subset of the variants from Tewhey et al. clearly skew from the $Unif(0,1)$ distribution one would expect from normally distributed samples, the fraction of alleles that defy the expected pattern is relatively small. This suggests that a t-test should usually provide a reasonable approximation of the true power.
@@ -404,10 +411,10 @@ shiftNonNormality = allTransfectionsStats %>%
 shiftNonNormality %>% 
   ggplot(aes(TS, allele2lilliefors)) + 
   geom_point(alpha = .1) +
-  geom_smooth() + 
   scale_y_log10() + 
   xlab('SNP transcriptional shift') + 
-  ylab('allele 2 Lilliefors P-value')
+  ylab('allele 2 Lilliefors P-value') +
+  ggtitle('SNP transcriptional shift vs. allele 2 Lilliefors\nNormality Test P-value in Tewhey et al., 2016')
 ```
 
 Furthermore, t-tests are generally considered robust against minor violations of the normality assumption (Lehmann 1986). 
