@@ -252,7 +252,7 @@ rs1674999counts %>%
   ggplot(aes(allele, activity)) + 
   geom_jitter(height = 0, width = .25, size = .8) + 
   facet_wrap('replicate') + 
-  xlab('barcode activity observations') +
+  ylab('barcode activity observations') +
   ggtitle('Activity measurements of rs1674999\nin Tewhey et al., 2016 by sample')
 ```
 
@@ -303,7 +303,8 @@ UMPRA %>%
   geom_vline(xintercept = .13,
              lty = 2,
              color = 'grey60') +
-  ggtitle('Density plot of depth-adjusted DNA count mean\nacross DNA replicates in Ulirsch et al., 2016')
+  ggtitle('Density plot of depth-adjusted DNA count mean\nacross DNA replicates in Ulirsch et al., 2016') +
+  xlab('Depth Adjusted Mean Barcode Count in DNA samples')
 ```
 
 And here are the distributions of allele activity standard deviations by sample:
