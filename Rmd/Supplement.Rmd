@@ -410,7 +410,7 @@ shiftNonNormality %>%
   ylab('allele 2 Lilliefors P-value')
 ```
 
-Furthermore, t-tests are generally considered robust against minor violations of the normality assumption (Devore 2008). 
+Furthermore, t-tests are generally considered robust against minor violations of the normality assumption (Lehmann 1986). 
 
 All of this together suggests that having a t-test underlie our power calculations would be reasonable. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
 
@@ -512,7 +512,7 @@ save(twelvemers, file = '~/designMPRA/outputs/inertTwelveMers.RData')
 1. Melnikov, A., Murugan, A., Zhang, X., Tesileanu, T., Wang, L., Rogov, P., … Mik-kelsen, T. S. (2012). Systematic dissection and optimization of inducible enhancers in human cells using a massively parallel reporter assay. Nature Bio-technology, 30(3), 271–7.  
 2. Tewhey, R., Kotliar, D., Park, D. S., Liu, B., Winnicki, S., Reilly, S. K., … Sabeti, P. C. (2016). Direct Identification of Hundreds of Expression-Modulating Variants using a Multiplexed Reporter Assay. Cell, 165(6), 1519–1529.  
 3. Ulirsch, J. C., Nandakumar, S. K., Wang, L., Giani, F. C., Zhang, X., Rogov, P., … Sankaran, V. G. (2016). Systematic Functional Dissection of Common Genetic Variation Affecting Red Blood Cell Traits. Cell, 165(6), 1530–1545.  
-4. Devore, J. L. (2008). The Two-Sample t Test and Confidence Interval. In Probability and Statistics For Engineering and the Sciences (7th ed., p. 336). Belmont, CA: Thomson Brooks/Cole.
+4. Lehmann, E. L. (1986). Unbiasedness: Applications to Normal Distributions; Confidence Intervals. In _Testing Statistical Hypotheses_ (2nd ed., pp. 203-206). Wiley.
 
 
 
