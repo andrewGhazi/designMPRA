@@ -575,7 +575,7 @@ shiftNonNormality %>%
 
 Given the common shape of the highly non-normal alleles seen in S3.1, we show here through Monte Carlo simulation that this non-normality does not significantly impact the outcome of a t-test. First we look at the activity measurements of the most highly non-normal allele in the entirety of Tewhey et al., 2016: the SNP `rs28519456_RC_altB` in the sample `HepG2.r5`.
 
-```{r}
+```{r, message=FALSE}
 library(pwr)
 library(parallel)
 
@@ -588,7 +588,7 @@ worst %>%
 ```  
 
 By re-sampling from this distribution, we can compute Monte Carlo simulations of the average power of a t-test to detect a difference between this distribution and a 'typical' reference allele (we use samples from a normal distribution with a standard deviation of .926). We can compare the simulated power to the theoretical power if both alleles were drawn from normal distributions.
-```{r}
+```{r, eval = FALSE}
 worst_mean = mean(worst$activity)
 
 # used to calculate effect size
@@ -619,18 +619,25 @@ sim_power = data_frame(transcription_shift = seq(-1.5, 1.5, length.out = 200),
                        theoretical_power = pwr.t.test(n = nrow(worst),
                                                       d = abs(transcription_shift) / pooled_SD,
                                                       type = 'two.sample',
-                                                      alternative = 'two.sided')$power,
-                       monte_carlo_power = mclapply(transcription_shift, simulate_power, mc.cores = 22) %>% unlist)
+                                                      alternative = 'two.sided',
+                                                      sig.level = .001)$power,
+                       monte_carlo_power = mclapply(transcription_shift, simulate_power, mc.cores = 22, sig_level = .001, n_sim = 30000) %>% unlist)
+
+```
+
+```{r}
+load('~/designMPRA/outputs/sim_power.RData')
 
 sim_power %>% 
   gather(power_type, power, -transcription_shift) %>% 
   ggplot(aes(transcription_shift, power, color = power_type)) + 
   geom_path() +
-  scale_y_continuous(breaks = seq(0, 1, by = .1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = .25),
+                     limits = c(0, 1)) +
   ggtitle('Monte Carlo simulation comparing non-normal allele\nt-test results and theoretical results')
 ```
 
-The two curves are almost exactly the same. If the heavy tail is on the same side as the reference allele it becomes negligibly harder to detect the shift, but if it's on the opposite side it becomes correspondingly easier.
+The two curves are almost exactly the same. 
 
 ### S3.4 Activity Normality Assumption - Conclusions
 
