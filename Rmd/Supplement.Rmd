@@ -5,6 +5,7 @@ date: \normalsize{6/21/2017}
 output: 
   pdf_document:
     toc: true
+    toc_depth: 2
     fig_caption: false
 ---
 
@@ -12,6 +13,8 @@ output:
 knitr::opts_chunk$set(echo = TRUE,
                       cache = TRUE)
 ```
+
+The raw code for this RMarkdown document can be found [at this link](https://github.com/andrewGhazi/designMPRA/blob/master/Rmd/Supplement.Rmd).
 
 ## S1 - MPRA diagrams
 
@@ -38,7 +41,12 @@ Below is an analysis and visualization the variance of MPRA activity measurement
 The study's data was acquired through direct correspondence with the authors. We compute the activity of each barcode in each transfection. Then, for every allele in every transfection, we compute the standard deviation of the activities. We then produce a histogram of the standard deviations in each transfection.
 
 ```{r, cache=FALSE, message=FALSE}
-library(tidyverse)
+#library(tidyverse)
+library(dplyr)
+library(purrr)
+library(readr)
+library(ggplot2)
+library(tidyr)
 library(magrittr)
 library(parallel)
 library(knitr)
@@ -49,7 +57,7 @@ library(nortest)
 ```{r}
 dir = '/mnt/bigData2/andrew/MPRA/Tewhey/indivTags/'
 
-files = list.files(dir, 
+file_names = list.files(dir, 
                    pattern = '.expanded$')
 
 getFileDepth = function(file){
@@ -63,7 +71,7 @@ getFileDepth = function(file){
 }
 
 #apply the above function to the sample files
-fileDepths = data_frame(src = files,
+fileDepths = data_frame(src = file_names,
                         fileDepth = mclapply(src, 
                                              getFileDepth,
                                              mc.cores = 19) %>% unlist)
@@ -72,10 +80,10 @@ fileDepths = data_frame(src = files,
 
 A few example DNA barcode counts by sample file:
 ```{r, eval = FALSE}
-dnaCounts = map(1:5, ~read_tsv(paste0(dir, files[.x]),
+dnaCounts = map(1:5, ~read_tsv(paste0(dir, file_names[.x]),
                                col_names = c('allele', 'barcode', 'count')) %>% 
-                  mutate(src = files[.x])) %>% 
-  reduce(bind_rows)
+                  mutate(src = file_names[.x])) %>% 
+  bind_rows
 
 dnaCounts %>% # show a random sample of the counts
   sample_n(5) %>% 
@@ -151,10 +159,10 @@ library(nortest) # for lillie.test()
 # For a given data file
 computeTransfectionStatistics = function(fileNum){
   # Get the file's depth normalization factor
-  depthNum = fileDepths %>% filter(src == files[fileNum]) %>% .$fileDepth 
+  depthNum = fileDepths %>% filter(src == file_names[fileNum]) %>% .$fileDepth 
   
   # Read in the counts
-  rnaCounts = read_tsv(paste0(dir, files[fileNum]), 
+  rnaCounts = read_tsv(paste0(dir, file_names[fileNum]), 
                        col_names = c('allele', 'barcode', 'count')) %>% 
     mutate(depthAdjCount = 1e6*count/depthNum) #normalize them for depth
   
@@ -171,14 +179,14 @@ computeTransfectionStatistics = function(fileNum){
                                    lillie.test(na.omit(activity))$p.value, 
                                    NA)) %>% 
     filter(numBarcodes > 1) %>% # take only alleles which had > 1 barcode 
-    mutate(file = files[fileNum]) # and add on a file identifier
+    mutate(file = file_names[fileNum]) # and add on a file identifier
    # The filter removes alleles that only had zero or one barcodes show up in
    # the RNA, for which a standard deviation is not meaningful
   
   return(alleleStatistics)
 }
 
-#apply the above function to the RNA data files
+#apply the above function to the RNA data file_names
 transfectionStatistics = mclapply(6:19,
                                   computeTransfectionStatistics,
                                   mc.cores = 14)
@@ -209,9 +217,9 @@ There is variability in the distribution of allele activity standard deviations 
 We can look at the activity distribution of the two alleles for a single SNP tested. We'll take `rs1674999` as an example. A random sample of the raw counts:
 
 ```{r}
-# counts = map(1:19, ~read_tsv(paste0(dir, files[.x]),
+# counts = map(1:19, ~read_tsv(paste0(dir, file_names[.x]),
 #                                col_names = c('allele', 'barcode', 'count')) %>% 
-#                   mutate(src = files[.x])) %>% 
+#                   mutate(src = file_names[.x])) %>% 
 #   reduce(bind_rows)
 # 
 # rs1674999counts = counts %>% filter(grepl('rs1674999', allele))
@@ -256,7 +264,7 @@ rs1674999counts %>%
   ggtitle('Activity measurements of rs1674999\nin Tewhey et al., 2016 by sample')
 ```
 
-This SNP doesn't seem to have a large transcriptional shift between the alleles (both alleles have roughly the same average activity), but one can see that this level of activity variance (close to 1.0 in most transfections, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require aggregating an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
+This SNP doesn't seem to have a large transcriptional shift between the alleles (i.e. both alleles have roughly the same average activity), but one can see that this level of activity variance (close to 1.0 in most transfections, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require aggregating an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
 
 ```{r}
 library(pwr)
@@ -361,7 +369,149 @@ bothStudies %>%
 
 ## S3 - Activity Normality Assumption  
 
-The "Power" tab of the application uses a t-test to estimate the power to detect functional variants with given activity variance across a range of transcriptional shifts.
+The "Power" tab of the application uses a t-test to estimate the power to detect functional variants with given activity variance across a range of transcriptional shifts. In this section we show that a t-test is a reasonable approximation for modelling MPRA data.
+
+### S3.1 - qqplots
+
+We can use a normal QQ plot to visually inspect the normality of allele activity levels. We'll do this for a set of randomly chosen alleles from each sample in Tewhey et al., 2016. 
+
+```{r}
+get_random_allele = function(fileNum){
+  dir = '/mnt/bigData2/andrew/MPRA/Tewhey/indivTags/'
+  
+  # Get the file's depth normalization factor
+  depthNum = fileDepths %>% filter(src == file_names[fileNum]) %>% .$fileDepth 
+  
+  # Read in the counts
+  rnaCounts = read_tsv(paste0(dir, file_names[fileNum]), 
+                       col_names = c('allele', 'barcode', 'count')) %>% 
+    mutate(depthAdjCount = 1e6*count/depthNum) #normalize them for depth
+  
+  # return a data_frame with the activity measurements for one allele
+  depthAdjDNAmeanCount %>% 
+    filter(bcMean > .06) %>% # this is where we introduce the cutoff 
+    left_join(rnaCounts, by = c('allele', 'barcode')) %>% #join onto DNA counts
+    na.omit %>% 
+    filter(allele == sample(.$allele, 1)) %>% 
+    mutate(activity = log(depthAdjCount/bcMean),
+           file_name = file_names[fileNum]) # and add on a file identifier
+}
+
+set.seed(123456)
+
+random_alleles = mclapply(6:19, get_random_allele, mc.cores = 14) %>% 
+  reduce(rbind) %>% 
+  as_tibble %>% 
+  mutate(file_name = gsub('Geuv_90K_', '', file_name) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
+  unite(allele_sample, allele, file_name, sep = '\n')
+
+qq_lines = random_alleles %>% # http://mgimond.github.io/ES218/Week06a.html
+  group_by(allele_sample) %>% 
+  summarise(act25 = quantile(activity,.25),
+            act75 = quantile(activity, .75),
+            norm25 = qnorm(.25),
+            norm75 = qnorm(.75),
+            qq_slope = (act25 - act75) / (norm25 - norm75),
+            qq_int = act25 - qq_slope * norm25)
+
+random_alleles %>%  
+  ggplot() + 
+  stat_qq(aes(sample = activity)) +
+  facet_wrap('allele_sample') + 
+  geom_abline(aes(slope = qq_slope, intercept = qq_int), 
+              data = qq_lines, 
+              color = 'grey60', lty = 2)
+```
+
+We can also do this to inspect the most non-normal alleles (see S3.2 to see how we define non-normality in terms of low Lilliefors test p-values) from each sample. 
+
+```{r}
+get_nonnormal_allele = function(file_allele_list){
+  dir = '/mnt/bigData2/andrew/MPRA/Tewhey/indivTags/'
+  
+  file_name = file_allele_list[['file_name']]
+  file_name_str = file_name
+  nonnormal_allele = file_allele_list[['allele']]
+  
+  depthNum = fileDepths %>% filter(src == paste0('Geuv_90K_', file_name, '.tag.ct.indiv.expanded')) %>% .$fileDepth 
+  
+  rnaCounts = read_tsv(paste0(dir, 'Geuv_90K_', file_name, '.tag.ct.indiv.expanded'), 
+                       col_names = c('allele', 'barcode', 'count')) %>% 
+    mutate(depthAdjCount = 1e6*count/depthNum) #normalize them for depth
+  
+  # return a data_frame with the activity measurements for one allele
+  depthAdjDNAmeanCount %>% 
+    filter(bcMean > .06) %>% # this is where we introduce the cutoff 
+    left_join(rnaCounts, by = c('allele', 'barcode')) %>% #join onto DNA counts
+    na.omit %>% 
+    filter(allele == nonnormal_allele) %>% 
+    mutate(activity = log(depthAdjCount/bcMean),
+           file_name = file_name_str) # and add on a file identifier
+   # The filter removes alleles that only had zero or one barcodes show up in
+   # the RNA, for which a standard deviation is not meaningful
+}
+
+nonnormal_alleles = allTransfectionsStats %>%
+  arrange(lillieforsP) %>% 
+  filter(!duplicated(file)) %$% 
+  map2(file, allele, ~list(file_name = .x, allele = .y)) %>% 
+  mclapply(get_nonnormal_allele, mc.cores = 14) %>% 
+  reduce(rbind) %>% 
+  as_tibble %>% 
+  mutate(file_name = gsub('Geuv_90K_', '', file_name) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
+  unite(allele_sample, allele, file_name, sep = '\n')
+
+qq_lines = nonnormal_alleles %>% # http://mgimond.github.io/ES218/Week06a.html
+  group_by(allele_sample) %>% 
+  summarise(act25 = quantile(activity,.25),
+            act75 = quantile(activity, .75),
+            norm25 = qnorm(.25),
+            norm75 = qnorm(.75),
+            qq_slope = (act25 - act75) / (norm25 - norm75),
+            qq_int = act25 - qq_slope * norm25)
+
+nonnormal_alleles %>%  
+  ggplot() + 
+  stat_qq(aes(sample = activity)) +
+  facet_wrap('allele_sample') + 
+  geom_abline(aes(slope = qq_slope, intercept = qq_int), data = qq_lines, color = 'grey60', lty = 2) +
+  ggtitle('Normal QQ plots of the most highly non-normal\nalleles in each sample of Tewhey et al., 2016')
+```
+
+These plots show that the most highly non-normal alleles generally feature heavy tails on one side. We noticed that the most highly non-normal allele in each sample is usually rs28519456_RC_altB so we repeat this process while filtering out any duplicate alleles:
+
+```{r}
+nonnormal_alleles = allTransfectionsStats %>%
+  arrange(lillieforsP) %>% 
+  filter(!duplicated(allele)) %>% 
+  filter(!duplicated(file)) %$% 
+  map2(file, allele, ~list(file_name = .x, allele = .y)) %>% 
+  mclapply(get_nonnormal_allele, mc.cores = 14) %>% 
+  reduce(rbind) %>% 
+  as_tibble %>% 
+  mutate(file_name = gsub('Geuv_90K_', '', file_name) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
+  unite(allele_sample, allele, file_name, sep = '\n')
+
+qq_lines = nonnormal_alleles %>% # http://mgimond.github.io/ES218/Week06a.html
+  group_by(allele_sample) %>% 
+  summarise(act25 = quantile(activity,.25),
+            act75 = quantile(activity, .75),
+            norm25 = qnorm(.25),
+            norm75 = qnorm(.75),
+            qq_slope = (act25 - act75) / (norm25 - norm75),
+            qq_int = act25 - qq_slope * norm25)
+
+nonnormal_alleles %>%  
+  ggplot() + 
+  stat_qq(aes(sample = activity)) +
+  facet_wrap('allele_sample') + 
+  geom_abline(aes(slope = qq_slope, intercept = qq_int), data = qq_lines, color = 'grey60', lty = 2)
+```
+
+
+### S3.2 - Lilliefors tests
+
+We can test every allele in a systematic, quantitative way through the use of Lilliefors tests.
 
 In the earlier section S2.1 describing the activity variance in MPRA assays, we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
 
@@ -392,7 +542,7 @@ While a subset of the variants from Tewhey et al. clearly skew from the $Unif(0,
 
 There is no indication that SNPs with large transcriptional shifts (i.e. those one aims to detect with the assay) systematically defy the normality assumption. The following plot shows this with the observed transcriptional shift on the x-axis and p-value of a Lilliefors test on the activity measurements of the second allele on the y-axis (the plot for the first allele looks very similar). If the most important SNPs systematically defied the normality assumptions, the SNPs on the left and right sides would show the lowest p-values, which is not observed:
 
-```{r, message = FALSE, warning = FALSE}
+```{r, message = FALSE, warning = FALSE, eval = FALSE}
 shiftNonNormality = allTransfectionsStats %>% 
   separate(allele, 
            into = c('SNP', 'allele'), 
@@ -415,10 +565,80 @@ shiftNonNormality %>%
   scale_y_log10() + 
   xlab('SNP transcriptional shift') + 
   ylab('allele 2 Lilliefors P-value') +
-  ggtitle('SNP transcriptional shift vs. allele 2 Lilliefors\nNormality Test P-value in Tewhey et al., 2016')
+  ggtitle('SNP transcriptional shift vs. allele 2 Lilliefors\nNormality Test P-value in Tewhey et al., 2016') +
+  geom_smooth()
 ```
 
-Furthermore, t-tests are generally considered robust against minor violations of the normality assumption (Lehmann 1986). 
+![](/mnt/labhome/andrew/designMPRA/outputs/TS_vs_Lilliefors_p.png)
+
+### S3.3 Monte Carlo t-test simulation
+
+Given the common shape of the highly non-normal alleles seen in S3.1, we show here through Monte Carlo simulation that this non-normality does not significantly impact the outcome of a t-test. First we look at the activity measurements of the most highly non-normal allele in the entirety of Tewhey et al., 2016: the SNP `rs28519456_RC_altB` in the sample `HepG2.r5`.
+
+```{r}
+library(pwr)
+library(parallel)
+
+worst = list(allele = 'rs28519456_RC_altB', file_name = 'HepG2.r5') %>% get_nonnormal_allele()
+
+worst %>%
+  ggplot(aes(x = activity)) + 
+  geom_histogram(aes(y = ..density..), bins = 30) + 
+  ggtitle('rs28519456_RC_altB in sample HepG2.r5\nThe most highly non-normal allele in Tewhey et al., 2016')
+```  
+
+By re-sampling from this distribution, we can compute Monte Carlo simulations of the average power of a t-test to detect a difference between this distribution and a 'typical' reference allele (we use samples from a normal distribution with a standard deviation of .926). We can compare the simulated power to the theoretical power if both alleles were drawn from normal distributions.
+```{r}
+worst_mean = mean(worst$activity)
+
+# used to calculate effect size
+pooled_SD = sqrt(((nrow(worst) - 1)*sd(worst$activity)**2 + (nrow(worst) - 1)*.926**2) / (nrow(worst)*2 - 2))
+
+simulate_power = function(transcription_shift, sig_level = .05, n_sim = 10000){
+  
+  #simulate a t-test many times
+  monte_carlo_p_values = sapply(1:n_sim, function(x){
+    
+    # randomly sample the most non-normal allele
+    non_normal_samples = sample(worst$activity, size = nrow(worst), replace = TRUE) 
+    
+    # randomly sample a "typical" allele
+    normal_samples = rnorm(nrow(worst), 
+                           mean = worst_mean - transcription_shift, 
+                           sd = .926) # using the average SD from Ulirsch and Tewhey together
+    
+    # compute the p-value of a t-test
+    t.test(non_normal_samples, normal_samples)$p.value
+  })
+  
+  # return the fraction that pass the input significance level
+  sum(monte_carlo_p_values < sig_level) / n_sim
+}
+
+sim_power = data_frame(transcription_shift = seq(-1.5, 1.5, length.out = 200),
+                       theoretical_power = pwr.t.test(n = nrow(worst),
+                                                      d = abs(transcription_shift) / pooled_SD,
+                                                      type = 'two.sample',
+                                                      alternative = 'two.sided')$power,
+                       monte_carlo_power = mclapply(transcription_shift, simulate_power, mc.cores = 22) %>% unlist)
+
+sim_power %>% 
+  gather(power_type, power, -transcription_shift) %>% 
+  ggplot(aes(transcription_shift, power, color = power_type)) + 
+  geom_path() +
+  scale_y_continuous(breaks = seq(0, 1, by = .1)) +
+  ggtitle('Monte Carlo simulation comparing non-normal allele\nt-test results and theoretical results')
+```
+
+The two curves are almost exactly the same. If the heavy tail is on the same side as the reference allele it becomes negligibly harder to detect the shift, but if it's on the opposite side it becomes correspondingly easier.
+
+### S3.4 Activity Normality Assumption - Conclusions
+
+* The distributions of a majority of alleles are indistinguishable from normal distributions (S3.1 and S3.2).  
+* Those that are highly non-normal are non-normal in a way that does not significantly impact the outcome of the t-test in terms of statistical power (S3.3).  
+* Non-normality does not correlate with high transcriptional shift, meaning that the rare violations of the normality assumption would only be impactful on SNPs that are uninteresting in the first place (S3.2).
+
+Furthermore we must remember that t-tests are generally considered robust against minor violations of the normality assumption (Lehmann 1986). 
 
 All of this together suggests that having a t-test underlie our power calculations would be reasonable. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
 
