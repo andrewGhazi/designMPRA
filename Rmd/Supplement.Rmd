@@ -508,6 +508,7 @@ nonnormal_alleles %>%
   geom_abline(aes(slope = qq_slope, intercept = qq_int), data = qq_lines, color = 'grey60', lty = 2)
 ```
 
+Generally the most highly non-normal alleles show most of their data falling in a roughly normal pattern and the rest going into a heavy negative tail. This pattern is also apparent in most of the highly non-normal alleles from Ulirsch et al., 2016 (analysis not shown), however it is less obvious given that study's lower number of barcodes per allele. See section S3.3 for a monte carlo simulation that examines the effect of this pattern on the results of a t-test.
 
 ### S3.2 - Lilliefors tests
 
@@ -573,13 +574,14 @@ shiftNonNormality %>%
 
 ### S3.3 Monte Carlo t-test simulation
 
-Given the common shape of the highly non-normal alleles seen in S3.1, we show here through Monte Carlo simulation that this non-normality does not significantly impact the outcome of a t-test. First we look at the activity measurements of the most highly non-normal allele in the entirety of Tewhey et al., 2016: the SNP `rs28519456_RC_altB` in the sample `HepG2.r5`.
+Given the common shape of the highly non-normal alleles seen in S3.1, we show here through Monte Carlo simulation that this non-normality does not significantly impact the outcome of a t-test. First we look at the activity measurements of the most highly non-normal allele in the entirety of Tewhey et al., 2016: allele `rs28519456_RC_altB` in the sample `HepG2.r5`.
 
 ```{r, message=FALSE}
 library(pwr)
 library(parallel)
 
-worst = list(allele = 'rs28519456_RC_altB', file_name = 'HepG2.r5') %>% get_nonnormal_allele()
+worst = list(allele = 'rs28519456_RC_altB', file_name = 'HepG2.r5') %>% 
+  get_nonnormal_allele()
 
 worst %>%
   ggplot(aes(x = activity)) + 
@@ -587,7 +589,7 @@ worst %>%
   ggtitle('rs28519456_RC_altB in sample HepG2.r5\nThe most highly non-normal allele in Tewhey et al., 2016')
 ```  
 
-By re-sampling from this distribution, we can compute Monte Carlo simulations of the average power of a t-test to detect a difference between this distribution and a 'typical' reference allele (we use samples from a normal distribution with a standard deviation of .926). We can compare the simulated power to the theoretical power if both alleles were drawn from normal distributions.
+By re-sampling from this distribution, we can compute Monte Carlo simulations of the average power of a t-test to detect a difference between this distribution and a "typical" reference allele (we use samples from a normal distribution with a standard deviation of .926) at $\alpha = 10^{-5}$. We can compare the simulated power to the theoretical power of the situation where both alleles were drawn from normal distributions.
 ```{r, eval = FALSE}
 worst_mean = mean(worst$activity)
 
@@ -602,7 +604,7 @@ simulate_power = function(transcription_shift, sig_level = .05, n_sim = 10000){
     # randomly sample the most non-normal allele
     non_normal_samples = sample(worst$activity, size = nrow(worst), replace = TRUE) 
     
-    # randomly sample a "typical" allele
+    # randomly sample a "typical" allele of the same size
     normal_samples = rnorm(nrow(worst), 
                            mean = worst_mean - transcription_shift, 
                            sd = .926) # using the average SD from Ulirsch and Tewhey together
@@ -615,18 +617,21 @@ simulate_power = function(transcription_shift, sig_level = .05, n_sim = 10000){
   sum(monte_carlo_p_values < sig_level) / n_sim
 }
 
-sim_power = data_frame(transcription_shift = seq(-1.5, 1.5, length.out = 200),
+sim_power = data_frame(transcription_shift = seq(-1.5, 1.5, length.out = 50),
                        theoretical_power = pwr.t.test(n = nrow(worst),
                                                       d = abs(transcription_shift) / pooled_SD,
                                                       type = 'two.sample',
                                                       alternative = 'two.sided',
-                                                      sig.level = .001)$power,
-                       monte_carlo_power = mclapply(transcription_shift, simulate_power, mc.cores = 22, sig_level = .001, n_sim = 30000) %>% unlist)
+                                                      sig.level = 1e-5)$power,
+                       monte_carlo_power = mclapply(transcription_shift, 
+                                                    simulate_power,
+                                                    mc.cores = 22,
+                                                    sig_level = 1e-5, n_sim = 3e6) %>% unlist)
 
 ```
 
 ```{r}
-load('~/designMPRA/outputs/sim_power.RData')
+load('~/designMPRA/outputs/sim_power_p_1e-5_n_3e6.RData')
 
 sim_power %>% 
   gather(power_type, power, -transcription_shift) %>% 
@@ -637,7 +642,7 @@ sim_power %>%
   ggtitle('Monte Carlo simulation comparing non-normal allele\nt-test results and theoretical results')
 ```
 
-The two curves are almost exactly the same. 
+The two curves are almost exactly the same, showing a difference in theoretical and simulated power of no more than +/- 0.04003 anywhere.
 
 ### S3.4 Activity Normality Assumption - Conclusions
 
@@ -647,7 +652,7 @@ The two curves are almost exactly the same.
 
 Furthermore we must remember that t-tests are generally considered robust against minor violations of the normality assumption (Lehmann 1986). 
 
-All of this together suggests that having a t-test underlie our power calculations would be reasonable. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
+All of this together suggests it would be reasonable to have a t-test underlie the power calculations. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
 
 ## S4 - Power calculations
 
@@ -674,9 +679,9 @@ This data frame is then plotted.
 We generated the set of all possible DNA 12-mers then screened these according to the design parameters in Melnikov et al., Nature Biotechnology 2012 intended to assure that the barcodes are inert. These involve the following parameters:  
 * each nucleotide occurs at least once  
 * no runs of single nucleotides greater than length 3  
-* do not contain restriction sites for KpnI/XbaI
+* do not contain restriction sites for KpnI/XbaI  
     + do not start with `TCT` (this creates a restriction site with XbaI with the preceding sequence)  
-* they do not match any human miR seed sequences
+* they do not match any human miR seed sequences  
 
 This was done with the `generate12mers.R` script in the package (copied below; not run in the generation of this document).
 
