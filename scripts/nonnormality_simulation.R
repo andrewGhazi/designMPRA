@@ -51,3 +51,48 @@ sim_power = data_frame(transcription_shift = seq(-1.1, 1.1, length.out = 50),
 sim_power %>%
   mutate(diff = monte_carlo_power - theoretical_power) %>%
   ggplot(aes(transcription_shift, diff)) + geom_path()
+
+
+### QQ analysis for Ulirsch
+u_activities = UMPRA %>% 
+  mutate_at(vars(contains('K562')), depthNormalize) %>% 
+  mutate(dnaMean = (K562_minP_DNA1 + K562_minP_DNA2)/2) %>% 
+  filter(dnaMean > .13) %>% 
+  select(-K562_minP_DNA1, -K562_minP_DNA2) %>% 
+  gather(sample, depthAdjCount, K562_CTRL_minP_RNA1:K562_GATA1_minP_RNA4) %>% 
+  mutate(activity = log(depthAdjCount / dnaMean))
+
+Ulirsch_lillie = u_activities %>%
+  group_by(construct, type, sample) %>% 
+  nest %>% 
+  mutate(n = map_int(data, ~sum(is.finite(.x$activity)))) %>% 
+  filter(n > 4) %>% 
+  mutate(lillie_p = map_dbl(data, ~lillie.test(.x$activity[is.finite(.x$activity)])$p.value)) %>% 
+  arrange(lillie_p)
+
+qq_lines = Ulirsch_lillie %>% 
+  .[1:20,] %>% 
+  unnest %>%
+  unite(construct_sample_type, construct, sample, type) %>% 
+  mutate(construct_sample_type = construct_sample_type %>% gsub('K562_|minP_', '', .)) %>% 
+  group_by(construct_sample_type) %>% 
+  summarise(act25 = quantile(activity,.25),
+            act75 = quantile(activity, .75),
+            norm25 = qnorm(.25),
+            norm75 = qnorm(.75),
+            qq_slope = (act25 - act75) / (norm25 - norm75),
+            qq_int = act25 - qq_slope * norm25)
+
+Ulirsch_lillie %>% 
+  .[1:20,] %>% 
+  unnest %>%
+  unite(construct_sample_type, construct, sample, type) %>% 
+  mutate(construct_sample_type = construct_sample_type %>% gsub('K562_|minP_', '', .)) %>% 
+  ggplot() + 
+  stat_qq(aes(sample = activity)) +
+  facet_wrap('construct_sample_type', scales = 'free') + 
+  geom_abline(aes(slope = qq_slope, intercept = qq_int), 
+              data = qq_lines, 
+              color = 'grey60', lty = 2)
+ggsave(filename = '~/designMPRA/outputs/plots/Ulirsch_most_nonnormal_qqplots.png')
+
