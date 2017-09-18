@@ -7,4 +7,4 @@ filesToDeploy = c('server.R',
                   'www/MPRAdiagram.png',
                   'www/MPRAseqDiagram.png')
 
-deployApp(appFiles = filesToDeploy)
+rsconnect::deployApp(appFiles = filesToDeploy)
