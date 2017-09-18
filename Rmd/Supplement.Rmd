@@ -30,7 +30,7 @@ The raw code for this RMarkdown document can be found [at this link](https://git
 
 ![MPRA Design Tools Sequence Element Layout](/mnt/labhome/andrew/designMPRA/www/MPRAseqDiagram.png)
 
-When using enzymes other than KpnI and XbaI through use of the R package, the corresponding segments of the sequence are replaced by the arguments `enzyme1` and `enzyme2` respectively.
+`enzyme1` and `enzyme2` default to KpnI and XbaI as in Melnikov et al., Nature Biotechnology 2012. The forward and reverse primers default to `ACTGGCCAG` and `CTCGGCGGCC` respectively.
 
 ## S2 - MPRA Activity Variance 
 
