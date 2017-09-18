@@ -111,7 +111,16 @@ shinyServer(function(input, output) {
       progress$set(value = value, detail = detail)
     }
     
-    res = processVCF(inVCF(), input$nBCperSNP, input$contextWidth, input$fwprimer, input$revprimer, updateProgress)
+    res = processVCF(vcf = inVCF(), 
+                     nper = input$nBCperSNP,
+                     seqwidth = input$contextWidth,
+                     fwprimer = input$fwprimer, 
+                     revprimer = input$revprimer,
+                     enzyme1 = input$enzyme1, 
+                     enzyme2 = input$enzyme2, 
+                     enzyme3 = input$enzyme3, 
+                     updateProgress)
+    
     on.exit(progress$close())
     return(res)
   })

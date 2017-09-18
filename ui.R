@@ -38,6 +38,15 @@ shinyUI(fluidPage(
                                   numericInput('contextWidth',
                                                label = h4('Genomic context width (1/2 construct width)'),
                                                value = 75),
+                                  textInput('enzyme1',
+                                            label = h4('Enzyme 1 (default = KpnI)'),
+                                            value = 'GGTACC'),
+                                  textInput('enzyme2',
+                                            label = h4('Enzyme 1 (default = XbaI)'),
+                                            value = 'TCTAGA'),
+                                  textInput('enzyme3',
+                                            label = h4('Enzyme 1 (default = SfiI)'),
+                                            value = 'GGCCNNNNNGGCC'),
                                   textInput('fwprimer',
                                             label = h4('Forward PCR primer'),
                                             value = 'ACTGGCCAG'),#From Namrata 8/11 - original CTGGCCAGTG # old 9-21 ACTGGCCAGTG
@@ -45,7 +54,7 @@ shinyUI(fluidPage(
                                             label = h4('Reverse PCR primer'),
                                             value = 'CTCGGCGGCC'),
                                   fileInput('vcf',
-                                            label = 'Input VCF'),
+                                            label = h3('Input VCF')),
                                   h5('Messages:'),
                                   htmlOutput('timeText'),
                                   br(),
@@ -110,11 +119,6 @@ shinyUI(fluidPage(
                  p('Current input constraints are: '),
                  tags$div(
                    tags$ul(
-                     tags$li('Restriction sites are limited to XbaI, KpnI, and SfiI as they are used in MPRA protocol published in',
-                             a(href = "https://www.jove.com/video/51719/massively-parallel-reporter-assays-in-cultured-mammalian-cells", 'Melnikov (2014)'),
-                             '(which is intended to be used with the',
-                             a(href = "https://www.addgene.org/49349/", 'pMPRA1 vector series'),
-                             '). Different enzymes can be used through use of', a('the companion R package', href = 'https://github.com/andrewGhazi/mpradesigntools'), '.'),
                      tags$li('Barcodes are constrained to being 12bp in length'),
                      tags$li('Insertions and deletions must encode the reference and mutant alleles (respectively) as a dash character \'-\'.'),
                      tags$li('Multiple alternate alleles should be separated in the ALT field by a comma and no spaces'),
@@ -148,7 +152,7 @@ shinyUI(fluidPage(
                  h3('Disclaimer'),
                  p('The outputs of this application are purely to make designing MPRA experiments more convenient for researchers. We make no guarantee as to the accuracy of the outputs and highly encourage you to methodically check your sequences before synthesizing your construct library.'),
                  br(),
-                 p('Furthermore, we emphasize that this web tool mainly serves for interactive, demonstrative purposes. We encourage users interested in designing large scale MPRAs to use ', a('the companion R package', href = 'https://github.com/andrewGhazi/mpradesigntools'), 'which is not limited in size and (slightly) more featureful.'),
+                 p('We encourage users interested in designing larger scale MPRAs to use ', a('the companion R package', href = 'https://github.com/andrewGhazi/mpradesigntools'), 'which is not limited in output size and (slightly) more featureful.'),
                  value = 3),
         id = 'selectedTab'
       )

@@ -16,19 +16,19 @@ spreadAllelesAcrossRows = function(snp){
   }
 }
 
-countDigSites = function(biostring) {
-  #Count the number of times KpnI, XbaI, and SfiI sites occur in a given biostring
-  
-  kpn = DNAString('GGTACC') #KpnI
-  xba = DNAString('TCTAGA') #XbaI
-  sfi = DNAString('GGCCNNNNNGGCC') #SfiI
-                  
-  sum(countPattern(kpn, biostring),
-      countPattern(xba, biostring),
-      countPattern(sfi, biostring, fixed = FALSE),
-      countPattern(kpn %>% reverse, biostring),
-      countPattern(xba %>% reverse, biostring),
-      countPattern(sfi %>% reverse, biostring, fixed = FALSE))
+countDigSites = function(biostring, enzyme1, enzyme2, enzyme3) {
+  #Count the number of times enzyme1, XbaI, and SfiI sites occur in a given biostring
+
+  # enzyme1 = DNAString('GGTACC') #KpnI
+  # xba = DNAString('TCTAGA') #XbaI
+  # sfi = DNAString('GGCCNNNNNGGCC') #SfiI
+
+  sum(countPattern(enzyme1, biostring, fixed = FALSE),
+      countPattern(enzyme2, biostring, fixed = FALSE),
+      countPattern(enzyme3, biostring, fixed = FALSE),
+      countPattern(enzyme1 %>% reverse, biostring, fixed = FALSE),
+      countPattern(enzyme2 %>% reverse, biostring, fixed = FALSE),
+      countPattern(enzyme3 %>% reverse, biostring, fixed = FALSE))
 }
 
 generateInsConstruct = function(snpseq, mid, reverseGene, seqwidth){
@@ -61,17 +61,17 @@ generateDelConstruct = function(snpseq, refwidth, seqwidth) {
            length(snpseq)))
 }
 
-processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress = NULL){
+processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, enzyme1, enzyme2, enzyme3, updateProgress = NULL){
   # snp is one row from the expanded vcf, including the reverseGene column which
   # indicates whether or not to use the reverse complement genomic context. It
   # also has a dedicated pool of barcodes to select from
   
   genome = BSgenome.Hsapiens.UCSC.hg38
-  kpn = 'GGTACC' #KpnI
-  xba = 'TCTAGA' #XbaI
-  sfi = 'GGCCNNNNNGGCC' #SfiI
+  # kpn = 'GGTACC' #KpnI
+  # xba = 'TCTAGA' #XbaI
+  # sfi = 'GGCCNNNNNGGCC' #SfiI
   
-  isSNV = (snp$REF %in% c('A', 'C', 'G', 'T') && snp$ALT %in% c('A', 'C', 'G', 'T'))
+  isSNV = (snp$REF %in% c('A', 'C', 'G', 'T') && snp$ALT %in% c('A', 'C', 'G', 'T')) 
   isINS = snp$REF == '-'
   isDEL = snp$ALT == '-'
   
@@ -89,7 +89,10 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
                     start = rangestart, 
                     end = rangeend)
     
-    ndigsite = countDigSites(snpseq)
+    ndigsite = countDigSites(snpseq,
+                             enzyme1, 
+                             enzyme2,
+                             enzyme3)
     
     if (ndigsite > 0) {
       failureRes = data_frame(ID = snp$ID,
@@ -122,12 +125,12 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
     res %<>% mutate(sequence = paste0(fwprimer,
                                       'TG',
                                       constrseq,
-                                      kpn,
-                                      xba,
+                                      enzyme1,
+                                      enzyme2,
                                       barcodes,
                                       'GGC',
                                       revprimer),
-                    ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+                    ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x), enzyme1, enzyme2, enzyme3)))
     
     #If all of the sequences contained > 3 digestion sites, there's probably some location at the context/other parts boundary that generates a site. This is too complicated to fix automatically, so just fail the SNP
     
@@ -156,12 +159,12 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
                                   sequence = paste0(fwprimer,
                                                     'TG',
                                                     constrseq,
-                                                    kpn,
-                                                    xba,
+                                                    enzyme1,
+                                                    enzyme2,
                                                     barcodes,
                                                     'GGC',
                                                     revprimer),
-                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x), enzyme1, enzyme2, enzyme3)))
         res = rbind(working, fixed)
       }
     }
@@ -179,7 +182,7 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
       snpseq %<>% reverseComplement()
     }
     
-    ndigsite = countDigSites(snpseq)
+    ndigsite = countDigSites(snpseq, enzyme1, enzyme2, enzyme3)
     
     if (ndigsite > 0) {
       failureRes = data_frame(ID = snp$ID,
@@ -192,6 +195,7 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
     }
     
     altseq = generateInsConstruct(snpseq, DNAString(snp$ALT), snp$reverseGene, seqwidth)
+    
     res = data_frame(ID = snp$ID,
                      CHROM = snp$CHROM,
                      snpIndex = 1:(nper*2),
@@ -205,12 +209,12 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
                      sequence = paste0(fwprimer,
                                        'TG',
                                        constrseq,
-                                       kpn,
-                                       xba,
+                                       enzyme1,
+                                       enzyme2,
                                        barcodes,
                                        'GGC',
                                        revprimer),
-                     ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+                     ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x), enzyme1, enzyme2, enzyme3)))
     
     #If all of the sequences contained > 3 digestion sites, there's probably some location at the context/other parts boundary that generates a site. This is too complicated to fix automatically, so just fail the SNP
     
@@ -239,12 +243,12 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
                                   sequence = paste0(fwprimer,
                                                     'TG',
                                                     constrseq,
-                                                    kpn,
-                                                    xba,
+                                                    enzyme1,
+                                                    enzyme2,
                                                     barcodes,
                                                     'GGC',
                                                     revprimer),
-                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x), enzyme1, enzyme2, enzyme3)))
         res = rbind(working, fixed)
       }
     }
@@ -259,7 +263,7 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
                     start = rangestart, 
                     end = rangeend)
     
-    ndigsite = countDigSites(snpseq)
+    ndigsite = countDigSites(snpseq, enzyme1, enzyme2, enzyme3)
     
     if (ndigsite > 0) {
       failureRes = data_frame(ID = snp$ID,
@@ -291,12 +295,12 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
     res %<>% mutate(sequence = paste0(fwprimer,
                                       'TG',
                                       constrseq,
-                                      kpn,
-                                      xba,
+                                      enzyme1,
+                                      enzyme2,
                                       barcodes,
                                       'GGC',
                                       revprimer),
-                    ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+                    ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x), enzyme1, enzyme2, enzyme3)))
     
     #If all of the sequences contained > 3 digestion sites, there's probably some location at the context/other parts boundary that generates a site. This is too complicated to fix automatically, so just fail the SNP
     
@@ -325,12 +329,12 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
                                   sequence = paste0(fwprimer,
                                                     'TG',
                                                     constrseq,
-                                                    kpn,
-                                                    xba,
+                                                    enzyme1,
+                                                    enzyme2,
                                                     barcodes,
                                                     'GGC',
                                                     revprimer),
-                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x))))
+                                  ndigSites = sequence %>% map_int(~countDigSites(DNAString(.x), enzyme1, enzyme2, enzyme3)))
         res = rbind(working, fixed)
       }
     }
@@ -359,7 +363,7 @@ processSnp = function(snp, nper, seqwidth, fwprimer, revprimer, updateProgress =
   return(res)
 }
 
-processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress = NULL){
+processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, enzyme1 = 'GGTACC', enzyme2 = 'TCTAGA', enzyme3 = 'GGCCNNNNNGGCC', updateProgress = NULL){
   library(BSgenome.Hsapiens.UCSC.hg38)
   library(magrittr)
   library(tidyverse)
@@ -368,7 +372,7 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
   select = dplyr::select
   
   vcf %<>% 
-    by_row(spreadAllelesAcrossRows) %>% 
+    purrrlyr::by_row(spreadAllelesAcrossRows) %>% 
     .$.out %>% 
     Reduce('rbind', .)
   
@@ -379,11 +383,6 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
   load('outputs/inertTwelveMersChar.RData')
   mers = twelvemers
   
-  # kpn = 'GGTACC' #KpnI
-  # xba = 'TCTAGA' #XbaI
-  # sfi = 'GGCCNNNNNGGCC' #SfiI
-  # 
-  # maxbc = nrow(vcf)*2*nper
   
   #Create a pool of barcodes for each snp
   vcf %<>% mutate(bcPools = split(mers, ceiling(1:length(mers)/(length(mers) / nrow(vcf)))),
@@ -391,12 +390,20 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
                   snpNums = 1:nrow(vcf),
                   snpTot = nrow(vcf))
   
-  print(sessionInfo())
+  #print(sessionInfo())
   #writeLines(capture.output(sessionInfo()), "/mnt/labhome/andrew/designMPRA/sessionInfo.txt")
   
   processed = vcf %>% 
     rowwise %>% 
-    do(seqs = processSnp(., nper = nper, seqwidth = seqwidth, fwprimer, revprimer, updateProgress)) %>% 
+    do(seqs = processSnp(., 
+                         nper = nper, 
+                         seqwidth = seqwidth,
+                         fwprimer = fwprimer, 
+                         revprimer = revprimer, 
+                         enzyme1 = enzyme1,
+                         enzyme2 = enzyme2,
+                         enzyme3 = enzyme3,
+                         updateProgress)) %>% 
     mutate(dataNames = names(seqs) %>% list,
            failed = any(grepl('result', dataNames)))
   
@@ -404,8 +411,9 @@ processVCF = function(vcf, nper, seqwidth, fwprimer, revprimer, updateProgress =
   
   failures = processed %>% 
     filter(failed) %>% 
-    select(seqs) %>% 
-    unnest %>% 
+    dplyr::select(seqs) %>% 
+    ungroup %>%
+    unnest %>%
     dplyr::rename(reason = result)
   
   successes = processed %>%
