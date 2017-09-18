@@ -373,7 +373,11 @@ The "Power" tab of the application uses a t-test to estimate the power to detect
 
 ### S3.1 - qqplots
 
-We can use a normal QQ plot to visually inspect the normality of allele activity levels. We'll do this for a set of randomly chosen alleles from each sample in Tewhey et al., 2016. 
+We can use a normal QQ plot to visually inspect the normality of allele activity levels. 
+
+#### S3.2.1  
+
+We'll do this for a set of randomly chosen alleles from each sample in Tewhey et al., 2016. 
 
 ```{r}
 get_random_allele = function(fileNum){
@@ -422,6 +426,8 @@ random_alleles %>%
               data = qq_lines, 
               color = 'grey60', lty = 2)
 ```
+
+#### S3.1.2  
 
 We can also do this to inspect the most non-normal alleles (see S3.2 to see how we define non-normality in terms of low Lilliefors test p-values) from each sample. 
 
