@@ -134,7 +134,8 @@ shinyUI(fluidPage(
                  tags$div(
                    tags$ul(
                      tags$li('sequence context comes from the hg38 assembly'),
-                     tags$li('Some snps may fail due to their sequence context containing or generating an undesired restriction site')
+                     tags$li('Some snps may fail due to their sequence context containing or generating an undesired restriction site'),
+                     tags$li('While enzyme3 does not show up in the sequence outputs, it is necessary to check the genomic context for its presence to avoid errors during plasmid library preparation.')
                    )
                  ),
                  br(),
