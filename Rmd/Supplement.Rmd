@@ -34,11 +34,13 @@ The raw code for this RMarkdown document can be found [at this link](https://git
 
 ## S2 - MPRA Activity Variance 
 
-Below is an analysis and visualization the variance of MPRA activity measurements. We do this by computing the activity of each barcode for an allele, then taking the standard deviation of those activities. Repeating this for all alleles, we can see what the distribution of standard deviations are across alleles.
+Below is an analysis and visualization of the variance of MPRA activity measurements. We do this by computing the activity of each barcode for an allele, then taking the standard deviation of those activities. Repeating this for all alleles, we can see what the distribution of standard deviations is across alleles.
 
 ### S2.1 - MPRA Activity Variance in Tewhey et al., Cell 2016
 
-The study's data was acquired through direct correspondence with the authors. We compute the activity of each barcode in each transfection. Then, for every allele in every transfection, we compute the standard deviation of the activities. We then produce a histogram of the standard deviations in each transfection.
+The study's data were acquired through direct correspondence with the authors. We compute the activity of each barcode in each transfection. Then, for every allele in every transfection, we compute the standard deviation of the activities. We then produce a histogram of the standard deviations in each transfection.
+
+Below is the complete code necessary to perform this analysis. First we read in the data, then we normalize the counts according to sample depths, then we compute the barcode activity levels and their standard deviations within each allele. 
 
 ```{r, cache=FALSE, message=FALSE}
 #library(tidyverse)
@@ -58,7 +60,7 @@ library(nortest)
 dir = '/mnt/bigData2/andrew/MPRA/Tewhey/indivTags/'
 
 file_names = list.files(dir, 
-                   pattern = '.expanded$')
+                        pattern = '.expanded$')
 
 getFileDepth = function(file){
   # function to get the total number of reads in a sample. 
@@ -74,7 +76,7 @@ getFileDepth = function(file){
 fileDepths = data_frame(src = file_names,
                         fileDepth = mclapply(src, 
                                              getFileDepth,
-                                             mc.cores = 19) %>% unlist)
+                                             mc.cores = 6) %>% unlist)
 
 ```
 
@@ -134,9 +136,9 @@ So for example the first barcode for allele `r depthAdjDNAmeanCount$allele[1]` w
 
 This normalizes each observed count according to how deeply the replicate was sequenced. 
 
-Tewhey et al., Cell 2016 had five plasmid replicates, so the estimates of the mean DNA counts from this study will likely be more precise than the counterparts in Ulirsch et al., Cell 2016 which had only two plasmid replicates. This will in turn make the downstream activity measurements more stable, thus the activity standard deviations in this paper will likely be lower.  
+Tewhey et al., Cell 2016 had five plasmid replicates. Therefore the estimates of the mean DNA counts from this study will likely be more precise than the counterparts in Ulirsch et al., Cell 2016 which had only two plasmid replicates. This will in turn make the downstream activity measurements more stable and thus the activity standard deviations in this paper will likely be lower.  
 
-We cut out barcodes that were not well represented in the DNA samples. Visual inspection of a (log-scale) density plot of the mean depth-normalized count shows that .06 would be a reasonable cutoff (shown as a dotted vertical line). This cuts out 4221460 out of 19611641 barcodes. The first few modes represents failed barcodes with very low counts while the large mode represents well-performing barcodes (for further example see Ulirsch et al., Cell 2016 Figure 1B):
+We exclude barcodes that were not well represented in the DNA samples. Visual inspection of a (log-scale) density plot of the mean depth-normalized count shows that .06 would be a reasonable cutoff (shown as a dotted vertical line). This cuts out 4,221,460 out of 19,611,641 barcodes. The first few modes represents failed barcodes with very low counts while the large mode represents well-performing barcodes (for further example see Ulirsch et al., Cell 2016 Figure 1B):
 
 ```{r}
 depthAdjDNAmeanCount %>% 
@@ -150,7 +152,7 @@ depthAdjDNAmeanCount %>%
   ggtitle('Density plot of depth-adjusted DNA count mean\nacross DNA replicates in Tewhey et al., 2016')
 ```
 
-Then we compute the activity levels of each barcode by taking the depth adjusted count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
+Then, we compute the activity levels of each barcode by taking the depth adjusted count from an RNA sequencing run, dividing through the depth adjusted mean count from the DNA runs, then taking the log:
 
 ```{r, fig.width=10, eval = FALSE}
 library(parallel)
@@ -189,7 +191,7 @@ computeTransfectionStatistics = function(fileNum){
 #apply the above function to the RNA data file_names
 transfectionStatistics = mclapply(6:19,
                                   computeTransfectionStatistics,
-                                  mc.cores = 14)
+                                  mc.cores = 6)
 
 # Join the results together and clean up the file names
 allTransfectionsStats = transfectionStatistics %>% 
@@ -214,7 +216,7 @@ allTransfectionsStats %>%
 
 There is variability in the distribution of allele activity standard deviations by transfection, but they are commonly above 1 (the mean of every allele in every transfection in this study is .926). Because activity is a log quantity, a standard deviation of 1 correpsonds to an average variability of $exp(1) \approx 2.7$-fold more mRNA molecules out per DNA molecule in within barcode replicates of the same allele. 
 
-We can look at the activity distribution of the two alleles for a single SNP tested. We'll take `rs1674999` as an example. A random sample of the raw counts:
+We can look at the activity distribution of the two alleles for a single SNP tested. We take `rs1674999` as an example. A random sample of the raw counts:
 
 ```{r}
 # counts = map(1:19, ~read_tsv(paste0(dir, file_names[.x]),
@@ -264,7 +266,9 @@ rs1674999counts %>%
   ggtitle('Activity measurements of rs1674999\nin Tewhey et al., 2016 by sample')
 ```
 
-This SNP doesn't seem to have a large transcriptional shift between the alleles (i.e. both alleles have roughly the same average activity), but one can see that this level of activity variance (close to 1.0 in most transfections, which is fairly common within the experiment as can be seen by the histograms of standard deviations above) is large. Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require aggregating an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
+This SNP does not seem to have a large transcriptional shift between the alleles (i.e. both alleles have roughly the same average activity), but one can see that this level of activity variance is large. The variance is close to 1.0 in most transfections so this SNP is a reasonably representative example of the variances observed throughout the experiment.  
+
+Detecting a low magnitude transcriptional shift (for example a 33% increase in mRNA per DNA corresponding to a TS of $log(1.33) = .285$) at 90% power at the significance level required to overcome multiple corrections would require aggregating an even larger number of data points than shown here. A power calculation with `pwr::pwr.t.test` shows this:
 
 ```{r}
 library(pwr)
@@ -276,7 +280,7 @@ pwr.t.test(d = .285,
 
 ### S2.2 - MPRA Activity Variance in Ulirsch et al., Cell 2016  
 
-Repeating the analysis with a different study. This data was acquired from the [authors' website](http://www.bloodgenes.org/RBC_MPRA/). The code differs slightly due to differences in how the data was provided by the authors, but the analysis is the same.
+Repeating the analysis with a different study. These data were acquired from the [authors' website](http://www.bloodgenes.org/RBC_MPRA/). The code differs slightly due to differences in how the data was provided by the authors, but the analysis is the same.
 
 A few example barcode counts:
 ```{r}
@@ -337,7 +341,7 @@ activitySDs %>%
   ggtitle('Allele activity standard deviation distributions\nby transfection in Ulirsch et al., 2016')
 ```
 
-Again, this plot shows that for a randomly chosen single allele, the standard deviation of its activity measurements are commonly around or above 1. The mean activity standard deviation across all samples in this study was `r mean(activitySDs$alleleSD)`.
+Again, this plot shows that for a randomly chosen single allele, the standard deviation of its activity measurements are commonly around or above 1. The mean activity standard deviation across all samples in this study was `r mean(activitySDs$alleleSD, na.rm = TRUE)`.
 
 If we combine both studies, we can see the typical range of activity standard deviations. The third output exponentiates the standard deviations, showing the corresponding standard fold-change in mRNA out to DNA in.
 
@@ -369,15 +373,15 @@ bothStudies %>%
 
 ## S3 - Activity Normality Assumption  
 
-The "Power" tab of the application uses a t-test to estimate the power to detect functional variants with given activity variance across a range of transcriptional shifts. In this section we show that a t-test is a reasonable approximation for modelling MPRA data.
+The "Power" tab of the application uses a t-test to estimate the power to detect functional variants with given activity variance across a range of transcriptional shifts. Therefore the validity of the underlying normality is an important consideration. We performed a number of analyses including normal Q-Q plots, Lilliefors tests, and Monte Carlo simulations to examine the impact of the normality assumption on our power calculations. In this section we show that a t-test is a reasonable approximation for modelling MPRA data.
 
-### S3.1 - qqplots
+### S3.1 - Normal Q-Q plots
 
 We can use a normal QQ plot to visually inspect the normality of allele activity levels. 
 
-#### S3.2.1  
+#### S3.1.1 - Normal Q-Q plots of randomly chosen alleles
 
-We'll do this for a set of randomly chosen alleles from each sample in Tewhey et al., 2016. 
+We will do this for a set of randomly chosen alleles from each sample in Tewhey et al., 2016. 
 
 ```{r}
 get_random_allele = function(fileNum){
@@ -403,7 +407,7 @@ get_random_allele = function(fileNum){
 
 set.seed(123456)
 
-random_alleles = mclapply(6:19, get_random_allele, mc.cores = 14) %>% 
+random_alleles = mclapply(6:19, get_random_allele, mc.cores = 6) %>% 
   reduce(rbind) %>% 
   as_tibble %>% 
   mutate(file_name = gsub('Geuv_90K_', '', file_name) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
@@ -427,7 +431,7 @@ random_alleles %>%
               color = 'grey60', lty = 2)
 ```
 
-#### S3.1.2  
+#### S3.1.2 Normal Q-Q plots of highly non-normal alleles 
 
 We can also do this to inspect the most non-normal alleles (see S3.2 to see how we define non-normality in terms of low Lilliefors test p-values) from each sample. 
 
@@ -461,7 +465,7 @@ nonnormal_alleles = allTransfectionsStats %>%
   arrange(lillieforsP) %>% 
   filter(!duplicated(file)) %$% 
   map2(file, allele, ~list(file_name = .x, allele = .y)) %>% 
-  mclapply(get_nonnormal_allele, mc.cores = 14) %>% 
+  mclapply(get_nonnormal_allele, mc.cores = 6) %>% 
   reduce(rbind) %>% 
   as_tibble %>% 
   mutate(file_name = gsub('Geuv_90K_', '', file_name) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
@@ -484,7 +488,7 @@ nonnormal_alleles %>%
   ggtitle('Normal QQ plots of the most highly non-normal\nalleles in each sample of Tewhey et al., 2016')
 ```
 
-These plots show that the most highly non-normal alleles generally feature heavy tails on one side. We noticed that the most highly non-normal allele in each sample is usually rs28519456_RC_altB so we repeat this process while filtering out any duplicate alleles:
+These plots show that the most highly non-normal alleles generally feature heavy tails on the left side of the distribution. We noticed that the most highly non-normal allele in each sample is usually rs28519456_RC_altB so we repeat this process while filtering out any duplicate alleles:
 
 ```{r}
 nonnormal_alleles = allTransfectionsStats %>%
@@ -492,7 +496,7 @@ nonnormal_alleles = allTransfectionsStats %>%
   filter(!duplicated(allele)) %>% 
   filter(!duplicated(file)) %$% 
   map2(file, allele, ~list(file_name = .x, allele = .y)) %>% 
-  mclapply(get_nonnormal_allele, mc.cores = 14) %>% 
+  mclapply(get_nonnormal_allele, mc.cores = 6) %>% 
   reduce(rbind) %>% 
   as_tibble %>% 
   mutate(file_name = gsub('Geuv_90K_', '', file_name) %>% gsub('.tag.ct.indiv.expanded', '', .)) %>% 
@@ -520,7 +524,9 @@ Generally the most highly non-normal alleles show most of their data falling in 
 
 We can test every allele in a systematic, quantitative way through the use of Lilliefors tests.
 
-In the earlier section S2.1 describing the activity variance in MPRA assays, we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
+In the earlier section S2.1 that describes the activity variance in MPRA assays we also calculated the p-value of a Lilliefors test for each allele. A Lilliefors test is a modified Kolmogorov-Smirnov test that tests if the data come from a normal distribution with unspecified mean and variance. A low p-value from a Lilliefors test suggests that the data come from a non-normal distribution.  
+
+#### S3.2.1 - Lilliefors p-value distribution  
 
 Looking at the distribution of these p-values will tell us how commonly the normality assumption of our t-test holds. If all samples come from normal distributions, the p-values should follow a $Unif(0,1)$ distribution (shown here scaled to this number of allele observations as a grey horizontal line).
 
@@ -547,7 +553,9 @@ allTransfectionsStats %>%
 
 While a subset of the variants from Tewhey et al. clearly skew from the $Unif(0,1)$ distribution one would expect from normally distributed samples, the fraction of alleles that defy the expected pattern is relatively small. This suggests that a t-test should usually provide a reasonable approximation of the true power.
 
-There is no indication that SNPs with large transcriptional shifts (i.e. those one aims to detect with the assay) systematically defy the normality assumption. The following plot shows this with the observed transcriptional shift on the x-axis and p-value of a Lilliefors test on the activity measurements of the second allele on the y-axis (the plot for the first allele looks very similar). If the most important SNPs systematically defied the normality assumptions, the SNPs on the left and right sides would show the lowest p-values, which is not observed:
+#### S3.2.2 - Lilliefors p-value and Transcriptional Shift relationship  
+
+There is no indication that SNPs with large transcriptional shifts (i.e. those one aims to detect with the assay) systematically defy the normality assumption. The following plot shows this with the observed transcriptional shift on the x-axis and p-value of a Lilliefors test on the activity measurements of the second allele on the y-axis (the plot for the first allele looks very similar). If SNPs with large transcriptional effects systematically defied the normality assumptions, the SNPs on the left and right sides would show the lowest p-values, which is not observed:
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
 shiftNonNormality = allTransfectionsStats %>% 
@@ -580,6 +588,8 @@ shiftNonNormality %>%
 
 ### S3.3 Monte Carlo t-test simulation
 
+#### S3.3.1  Non-normal allele
+
 Given the common shape of the highly non-normal alleles seen in S3.1, we show here through Monte Carlo simulation that this non-normality does not significantly impact the outcome of a t-test. First we look at the activity measurements of the most highly non-normal allele in the entirety of Tewhey et al., 2016: allele `rs28519456_RC_altB` in the sample `HepG2.r5`.
 
 ```{r, message=FALSE}
@@ -600,7 +610,8 @@ By re-sampling from this distribution, we can compute Monte Carlo simulations of
 worst_mean = mean(worst$activity)
 
 # used to calculate effect size
-pooled_SD = sqrt(((nrow(worst) - 1)*sd(worst$activity)**2 + (nrow(worst) - 1)*.926**2) / (nrow(worst)*2 - 2))
+pooled_SD = sqrt(((nrow(worst) - 1)*sd(worst$activity)**2 + (nrow(worst) - 1)*.926**2) / 
+                   (nrow(worst)*2 - 2))
 
 simulate_power = function(transcription_shift, sig_level = .05, n_sim = 10000){
   
@@ -623,7 +634,7 @@ simulate_power = function(transcription_shift, sig_level = .05, n_sim = 10000){
   sum(monte_carlo_p_values < sig_level) / n_sim
 }
 
-sim_power = data_frame(transcription_shift = seq(-1.5, 1.5, length.out = 50),
+sim_power = data_frame(transcription_shift = seq(-1.1, 1.1, length.out = 50),
                        theoretical_power = pwr.t.test(n = nrow(worst),
                                                       d = abs(transcription_shift) / pooled_SD,
                                                       type = 'two.sample',
@@ -631,7 +642,7 @@ sim_power = data_frame(transcription_shift = seq(-1.5, 1.5, length.out = 50),
                                                       sig.level = 1e-5)$power,
                        monte_carlo_power = mclapply(transcription_shift, 
                                                     simulate_power,
-                                                    mc.cores = 22,
+                                                    mc.cores = 6,
                                                     sig_level = 1e-5, n_sim = 3e6) %>% unlist)
 
 ```
@@ -648,7 +659,60 @@ sim_power %>%
   ggtitle('Monte Carlo simulation comparing non-normal allele\nt-test results and theoretical results')
 ```
 
-The two curves are almost exactly the same, showing a difference in theoretical and simulated power of no more than +/- 0.04003 anywhere.
+The two curves are very close, showing a maximum absolute difference between theoretical and simulated power of 0.0400.
+
+#### S3.3.2 Normal allele
+
+For the sake of comparison, we repeated the process using an allele from the same transfection whose activity levels looked convincingly normally distributed: `rs12942988_altB`. We chose this allele because it had the same number of barcode allele measurements as `rs28519456_RC_altB` and it's Lilliefors test p-value was 0.782.
+
+```{r, message=FALSE, echo = FALSE}
+load('~/designMPRA/outputs/sim_power_rs12942988_altB.RData')
+```
+
+```{r, eval = FALSE}
+good = list(allele = 'rs12942988_altB', file_name = 'HepG2.r5') %>% 
+  get_nonnormal_allele()
+```
+
+```{r}
+good %>%
+  ggplot(aes(activity)) + 
+  geom_histogram(bins = 30) +
+  geom_rug() + 
+  labs(title = 'rs12942988_altB in sample HepG2.r5,\nan example of a roughly normally distributed allele')
+```
+
+```{r, eval = FALSE}
+good_mean = mean(good$activity)
+
+# used to calculate effect size
+pooled_SD = sqrt(((nrow(good) - 1)*sd(good$activity)**2 + (nrow(good) - 1)*.926**2) / 
+                   (nrow(good)*2 - 2))
+
+sim_power = data_frame(transcription_shift = seq(-1.1, 1.1, length.out = 50),
+                       theoretical_power = pwr.t.test(n = nrow(good),
+                                                      d = abs(transcription_shift) / pooled_SD,
+                                                      type = 'two.sample',
+                                                      alternative = 'two.sided',
+                                                      sig.level = 1e-5)$power,
+                       monte_carlo_power = mclapply(transcription_shift, 
+                                                    simulate_power,
+                                                    mc.cores = 6,
+                                                    sig_level = 1e-5, n_sim = 3e6) %>% unlist)
+```
+```{r}
+load('~/designMPRA/outputs/sim_power_rs12942988_altB.RData')
+sim_power %>% 
+  gather(power_type, power, -transcription_shift) %>% 
+  ggplot(aes(transcription_shift, power, color = power_type)) + 
+  geom_path(aes(lty = power_type), lwd = .75) +
+  scale_y_continuous(breaks = seq(0, 1, by = .25),
+                     limits = c(0, 1)) +
+  ggtitle('Monte Carlo simulation comparing normal allele\nt-test results and theoretical results')
+
+```
+
+As expected, the simulated power almost exactly matches the theoretical power, showing a maximum absolute difference of 0.00341.  
 
 ### S3.4 Activity Normality Assumption - Conclusions
 
@@ -658,7 +722,7 @@ The two curves are almost exactly the same, showing a difference in theoretical 
 
 Furthermore we must remember that t-tests are generally considered robust against minor violations of the normality assumption (Lehmann 1986). 
 
-All of this together suggests it would be reasonable to have a t-test underlie the power calculations. Researchers won't know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
+All of this together suggests it would be reasonable to have a t-test underlie the power calculations. Researchers cannot know the activity variance their experimental setups will achieve nor the true transcriptional shifts of their variants _a priori_ in any case. The "Power" tab of the application is meant to use a few assumptions in order to provide approximate power estimates that researchers can use as rough guidelines for their experiments.
 
 ## S4 - Power calculations
 
